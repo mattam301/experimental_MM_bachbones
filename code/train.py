@@ -66,6 +66,7 @@ def train(model: nn.Module,
                     data[k] = v.to(device)
             labels = data["label_tensor"]
             sample_idx = data["uid"]
+            print()
 
             nll, ratio, take_samp, uni_nll = model.get_loss(data)
             
