@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import torch.nn as nn
+from typing import List
+from comm_loss import CoMMLoss 
 from backbone import LateFusion, MMGCN, MultiDialogueGCN, MM_DFN, MultiBiModel
-
+from mmfusion import MMFusion
 
 class Model(nn.Module):
     def __init__(self, args):
@@ -24,8 +26,36 @@ class Model(nn.Module):
         self.modalities = args.modalities
         self.threshold = args.cl_threshold
         self.growing_factor = args.cl_growth
+        
+        self.use_comm = args.use_comm
+        # CoMM
+        n_modalities = 3
+        input_dims = [1024, 1024, 1024]
+        input_adapters: List[nn.Module] = [
+            nn.Linear(in_dim, 1024) for in_dim in input_dims
+        ]
+        from comm import CoMM
+        comm_fuse = MMFusion(
+        input_adapters=input_adapters,
+        embed_dim=1024,
+        fusion="concat",   # or "x-attn"
+        pool="cls",        # or "mean"
+        n_heads=4,
+        n_layers=1,
+        add_bias_kv=False,
+        dropout=0.1
+    )
+        
+        self.comm_module = CoMM(
+            comm_enc=comm_fuse, 
+            hidden_dim=1024, 
+            n_classes=6, 
+            augmentation_style="linear", 
+            late_comm=self.late_comm
+        )
 
     def forward(self, data):
+        # legacy pipeline
         joint, logit = self.net(data)
 
         prob = F.log_softmax(joint, dim=-1)
@@ -48,6 +78,22 @@ class Model(nn.Module):
         return prob, prob_m, ratio
 
     def get_loss(self, data):
+        # Get CoMM loss:
+        # CoMM added
+        if self.use_comm:
+            textf = data["tensor"]['t']
+            audiof = data["tensor"]['a']
+            visualf = data["tensor"]['v']
+            z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, all_transformer_out)
+            comm_loss = CoMMLoss()
+            comm_loss_values = comm_loss({
+                    "aug1_embed": z1,
+                    "aug2_embed": z2,
+                    "prototype": -1  # You need to define/select this somewhere
+                })
+        else:
+            comm_loss_values = 0
+        # Legacy loss
         joint, logit = self.net(data)
 
         prob = F.log_softmax(joint, dim=-1)
@@ -94,7 +140,7 @@ class Model(nn.Module):
 
         take_sample = torch.sum(v)
 
-        return loss.mean(), ratio, take_sample, loss_m
+        return loss.mean() + comm_loss_values, ratio, take_sample, loss_m # hardcoded comm loss for now
 
     def hard_regularization(self, scores, loss):
         if self.args.use_cl:

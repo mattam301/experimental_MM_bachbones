@@ -21,6 +21,7 @@ from utils import set_seed, weight_visualize
 import json
 
 
+
 def train(model: nn.Module,
           train_set: Dataloader,
           dev_set: Dataloader,
@@ -66,7 +67,11 @@ def train(model: nn.Module,
                     data[k] = v.to(device)
             labels = data["label_tensor"]
             sample_idx = data["uid"]
-            print()
+            textf = data["tensor"]['t']
+            audiof = data["tensor"]['a']
+            visualf = data["tensor"]['v']
+            textf, audiof, visualf = textf.to(device), audiof.to(device), visualf.to(device)
+            
 
             nll, ratio, take_samp, uni_nll = model.get_loss(data)
             
@@ -398,6 +403,9 @@ def get_argurment():
 
     parser.add_argument(
         "--use_speaker", action="store_true", default=False,
+    )
+    parser.add_argument(
+        "--use_comm", action="store_true", default=False,
     )
 
     args, unknown = parser.parse_known_args()

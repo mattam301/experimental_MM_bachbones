@@ -1,4 +1,4 @@
-python code/train.py \
+python /content/experimental_MM_bachbones/code/train.py \
 --backbone="mmgcn" \
 --name=demo6_cl \
 --hidden_dim=256 \
