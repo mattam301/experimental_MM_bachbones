@@ -139,7 +139,7 @@ class Model(nn.Module):
 
         take_sample = torch.sum(v)
 
-        return loss.mean() + comm_loss_values, ratio, take_sample, loss_m # hardcoded comm loss for now
+        return loss.mean(), ratio, take_sample, loss_m, comm_loss_values # hardcoded comm loss for now
 
     def hard_regularization(self, scores, loss):
         if self.args.use_cl:

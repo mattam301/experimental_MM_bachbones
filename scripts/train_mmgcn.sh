@@ -3,7 +3,7 @@ python /content/experimental_MM_bachbones/code/train.py \
 --name=demo6_cl \
 --hidden_dim=256 \
 --learning_rate=0.0001 \
---dataset="meld" \
+--dataset="iemocap" \
 --modalities=av \
 --batch_size=32 \
 --epochs=60 \
@@ -11,6 +11,7 @@ python /content/experimental_MM_bachbones/code/train.py \
 --drop_rate=0.4 \
 --early_stopping=20 \
 --encoder_modules=transformer \
---use_cl \
---cl_threshold=0.4 \
---cl_growth=1.7 \
+# --use_cl \
+# --cl_threshold=0.4 \
+# --cl_growth=1.7 \
+--use_comm \

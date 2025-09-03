@@ -73,13 +73,14 @@ def train(model: nn.Module,
             textf, audiof, visualf = textf.to(device), audiof.to(device), visualf.to(device)
             
 
-            nll, ratio, take_samp, uni_nll = model.get_loss(data)
+            nll, ratio, take_samp, uni_nll, comm_loss_value = model.get_loss(data)
             
             total_take_sample += take_samp
             total_sample += len(labels)
             
             
             loss = nll.item()
+            loss += comm_loss_value
             _loss += loss
             for m in modalities:
                 loss_m[m] += uni_nll[m].item()
