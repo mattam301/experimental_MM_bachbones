@@ -51,7 +51,6 @@ class Model(nn.Module):
             hidden_dim=1024, 
             n_classes=6, 
             augmentation_style="linear", 
-            late_comm=self.late_comm
         )
 
     def forward(self, data):
@@ -84,7 +83,7 @@ class Model(nn.Module):
             textf = data["tensor"]['t']
             audiof = data["tensor"]['a']
             visualf = data["tensor"]['v']
-            z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, all_transformer_out)
+            z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, None)
             comm_loss = CoMMLoss()
             comm_loss_values = comm_loss({
                     "aug1_embed": z1,

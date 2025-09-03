@@ -40,7 +40,7 @@ def autoencoder_augmentation(self, x):
     
     return x_aug
 class CoMM(nn.Module):
-    def __init__(self, comm_enc, hidden_dim, n_classes, augmentation_style="linear", late_comm=False):
+    def __init__(self, comm_enc, hidden_dim, n_classes, augmentation_style="linear"):
         """
         CoMM module that can be plugged into any multimodal backbone.
 
@@ -53,10 +53,18 @@ class CoMM(nn.Module):
                        else apply CoMM on raw modality embeddings (early)
         """
         super().__init__()
+        
+        #hardcoded
+        D_text, D_audio, D_visual = 768, 100, 512
+        # Temporal convolutional layers
+        self.textf_input = nn.Conv1d(D_text, hidden_dim, kernel_size=1, padding=0, bias=False)
+        self.acouf_input = nn.Conv1d(D_audio, hidden_dim, kernel_size=1, padding=0, bias=False)
+        self.visuf_input = nn.Conv1d(D_visual, hidden_dim, kernel_size=1, padding=0, bias=False)
+        
         self.comm_enc = comm_enc
         self.hidden_dim = hidden_dim
         self.n_classes = n_classes
-        self.late_comm = late_comm
+        # self.late_comm = late_comm
 
         if augmentation_style == "autoencoder":
             self.augment_1 = self.autoencoder_augmentation
@@ -127,14 +135,17 @@ class CoMM(nn.Module):
         Returns:
             z1, z2, all_final_out
         """
-        if self.late_comm:
-            # Late: use post-fusion features
-            if all_transformer_out is None:
-                raise ValueError("all_transformer_out is required for late_comm=True")
-            x = [textf, acouf, visuf]
-        else:
+        # if self.late_comm:
+        #     # Late: use post-fusion features
+        #     if all_transformer_out is None:
+        #         raise ValueError("all_transformer_out is required for late_comm=True")
+        #     x = [textf, acouf, visuf]
+        # else:
             # Early: use raw projected features
-            x = [textf, acouf, visuf]
+        textf = self.textf_input(textf.permute(1, 2, 0)).transpose(1, 2)
+        acouf = self.acouf_input(acouf.permute(1, 2, 0)).transpose(1, 2)
+        visuf = self.visuf_input(visuf.permute(1, 2, 0)).transpose(1, 2)
+        x = [textf, acouf, visuf]
 
         # Augment twice
         x1 = self.augment_1(x)
@@ -148,13 +159,12 @@ class CoMM(nn.Module):
         z2 = [self.head(z) for z in self.comm_enc(x2, mask_modalities=all_masks)]
 
         # If early_comm: add comm_true_out fusion
-        if not self.late_comm and all_transformer_out is not None:
+        if all_transformer_out is not None:
             comm_true_out = self.comm_enc(x, mask_modalities=None)  # [B, D]
             comm_expanded = comm_true_out.unsqueeze(1).expand(-1, all_transformer_out.size(1), -1)
             fused_out = torch.cat([all_transformer_out, comm_expanded], dim=-1)
-            # all_final_out = self.comm_fuse(fused_out)
         else:
-            # Default to using just transformer output (e.g. late_comm)
-            # all_final_out = self.comm_fuse(torch.cat([all_transformer_out, all_transformer_out], dim=-1))
-            pass
+            fused_out = None
+        # all_final_out = self.comm_fuse(fused_out)
+
         return z1, z2, fused_out
