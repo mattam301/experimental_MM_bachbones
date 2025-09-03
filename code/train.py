@@ -80,7 +80,7 @@ def train(model: nn.Module,
             
             
             loss = nll.item()
-            loss += comm_loss_value.item()
+            loss += comm_loss_value["loss"].item()
             _loss += loss
             for m in modalities:
                 loss_m[m] += uni_nll[m].item()
