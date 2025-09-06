@@ -19,7 +19,7 @@ class ModalityBranch(nn.Module):
 
 
 class ThreeModalityModel(nn.Module):
-    def __init__(self, in_dim, out_dim, final_dim, n_classes):
+    def __init__(self, in_dim, out_dim, final_dim):
         super().__init__()
         # Three modality branches
         self.mod1 = ModalityBranch(in_dim, out_dim)

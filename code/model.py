@@ -29,6 +29,7 @@ class Model(nn.Module):
         self.growing_factor = args.cl_growth
         
         self.use_comm = args.use_comm
+        self.use_smurf = args.use_smurf
         # CoMM
         n_modalities = 3
         input_dims = [1024, 1024, 1024]
@@ -53,7 +54,14 @@ class Model(nn.Module):
             n_classes=6, 
             augmentation_style="linear", 
         )
-        self.smurf_model = ThreeModalityModel(in_dim=1024, out_dim=512, final_dim=6)
+        hidden_dim = 1024
+        # SMURF
+        #hardcoded
+        D_text, D_audio, D_visual = 768, 512, 1024
+        self.textf_input = nn.Conv1d(D_text, hidden_dim, kernel_size=1, padding=0, bias=False)
+        self.acouf_input = nn.Conv1d(D_audio, hidden_dim, kernel_size=1, padding=0, bias=False)
+        self.visuf_input = nn.Conv1d(D_visual, hidden_dim, kernel_size=1, padding=0, bias=False)
+        self.smurf_model = ThreeModalityModel(in_dim=hidden_dim, out_dim=hidden_dim, final_dim=6)
         
 
     def forward(self, data):

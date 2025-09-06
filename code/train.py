@@ -411,6 +411,9 @@ def get_argurment():
     parser.add_argument(
         "--use_comm", action="store_true", default=False,
     )
+    parser.add_argument(
+        "--use_smurf", action="store_true", default=False,
+    )
 
     args, unknown = parser.parse_known_args()
 
