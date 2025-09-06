@@ -88,6 +88,11 @@ class Model(nn.Module):
             textf = data["tensor"]['t']
             audiof = data["tensor"]['a']
             visualf = data["tensor"]['v']
+            # apply temporal convolution
+            textf = self.textf_input(textf.transpose(1, 2)).transpose(1, 2)
+            audiof = self.acouf_input(audiof.transpose(1, 2)).transpose(1, 2)
+            visualf = self.visuf_input(visualf.transpose(1, 2)).transpose(1, 2)
+            # SMURF forward
             m1, m2, m3, final_repr = self.smurf_model(textf, audiof, visualf)
             corr_loss = compute_corr_loss(m1, m2, m3)
             # Average prob between smurf and legacy
