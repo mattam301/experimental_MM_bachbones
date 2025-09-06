@@ -6,6 +6,7 @@ from typing import List
 from comm_loss import CoMMLoss 
 from backbone import LateFusion, MMGCN, MultiDialogueGCN, MM_DFN, MultiBiModel
 from mmfusion import MMFusion
+from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
 class Model(nn.Module):
     def __init__(self, args):
@@ -52,6 +53,8 @@ class Model(nn.Module):
             n_classes=6, 
             augmentation_style="linear", 
         )
+        self.smurf_model = ThreeModalityModel(in_dim=1024, out_dim=512, final_dim=6)
+        
 
     def forward(self, data):
         # legacy pipeline
@@ -73,7 +76,16 @@ class Model(nn.Module):
                 m: scores[m] / min_score
                 for m in self.modalities
             }
-
+        if self.use_smurf:
+            textf = data["tensor"]['t']
+            audiof = data["tensor"]['a']
+            visualf = data["tensor"]['v']
+            m1, m2, m3, final_repr = self.smurf_model(textf, audiof, visualf)
+            corr_loss = compute_corr_loss(m1, m2, m3)
+            # Average prob between smurf and legacy
+            final_logits = final_repr
+            prob_smurf = F.log_softmax(final_logits, dim=-1)
+            prob = (prob + prob_smurf) / 2
         return prob, prob_m, ratio
 
     def get_loss(self, data):
