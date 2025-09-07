@@ -67,7 +67,6 @@ class Model(nn.Module):
     def forward(self, data):
         # legacy pipeline
         joint, logit = self.net(data)
-
         prob = F.log_softmax(joint, dim=-1)
         prob_m = {
             m: F.log_softmax(logit[m], dim=-1) for m in self.modalities
@@ -89,15 +88,26 @@ class Model(nn.Module):
             audiof = data["tensor"]['a']
             visualf = data["tensor"]['v']
             # apply temporal convolution
-            textf = self.textf_input(textf.transpose(1, 2)).transpose(1, 2)
-            audiof = self.acouf_input(audiof.transpose(1, 2)).transpose(1, 2)
-            visualf = self.visuf_input(visualf.transpose(1, 2)).transpose(1, 2)
+            textf = self.textf_input(textf.permute(1, 2, 0)).transpose(1, 2)
+            audiof = self.acouf_input(audiof.permute(1, 2, 0)).transpose(1, 2)
+            visualf = self.visuf_input(visualf.permute(1, 2, 0)).transpose(1, 2)
             # SMURF forward
             m1, m2, m3, final_repr = self.smurf_model(textf, audiof, visualf)
             corr_loss = compute_corr_loss(m1, m2, m3)
             # Average prob between smurf and legacy
             final_logits = final_repr
-            prob_smurf = F.log_softmax(final_logits, dim=-1)
+  
+            # mask out padding and flatten (hot fix)
+            prob_smurf = final_logits.permute(1, 0, 2)  # -> [batch, seq, n_classes]
+            masked_logits = []
+            for i, L in enumerate(data["length"]):  # lengths per dialogue
+                masked_logits.append(prob_smurf[i, :L])  # keep only valid utterances
+            prob_smurf = torch.cat(masked_logits, dim=0)  # -> [sum(lengths), n_classes]
+
+            # now prob_smurf matches joint/logit shape
+            prob_smurf = F.log_softmax(prob_smurf, dim=-1)
+
+            # fuse with MMGCN prob
             prob = (prob + prob_smurf) / 2
         return prob, prob_m, ratio
 
