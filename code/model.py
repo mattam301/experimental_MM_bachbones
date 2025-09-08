@@ -104,21 +104,24 @@ class Model(nn.Module):
             final_logits = final_repr
   
             # mask out padding and flatten (hot fix)
-            prob_smurf = final_logits.permute(1, 0, 2)  # -> [batch, seq, n_classes]
+            logit_smurf = final_logits.permute(1, 0, 2)  # -> [batch, seq, n_classes]
             masked_logits = []
             for i, L in enumerate(data["length"]):  # lengths per dialogue
-                masked_logits.append(prob_smurf[i, :L])  # keep only valid utterances
-            prob_smurf = torch.cat(masked_logits, dim=0)  # -> [sum(lengths), n_classes]
+                masked_logits.append(logit_smurf[i, :L])  # keep only valid utterances
+            logit_smurf = torch.cat(masked_logits, dim=0)  # -> [sum(lengths), n_classes]
 
             # now prob_smurf matches joint/logit shape
-            prob_smurf = F.log_softmax(prob_smurf, dim=-1)
-            fused_repr = torch.cat([prob, prob_smurf], dim=-1)  # [sum(lengths), 12]
-            fused_prob = self.fusion_layer(fused_repr)          # Linear/MLP → [sum(lengths), n_classes]    
+            # prob_smurf = F.log_softmax(prob_smurf, dim=-1)
+            fused_repr = torch.cat([joint, logit_smurf], dim=-1)  # [sum(lengths), 12]
+            fused_logits = self.fusion_layer(fused_repr)          # Linear/MLP → [sum(lengths), n_classes] 
+            fused_prob = F.log_softmax(fused_logits, dim=-1)
             # # fuse with MMGCN prob
             # prob = (prob + prob_smurf) / 2
             
-            
-        return prob, prob_m, ratio, fused_prob if self.use_smurf else prob, prob_m, ratio
+        if self.use_smurf:   
+            return prob, prob_m, ratio, fused_prob 
+        else:
+            return prob, prob_m, ratio, prob
 
     def get_loss(self, data):
         # Get CoMM loss:
@@ -139,7 +142,10 @@ class Model(nn.Module):
         # Legacy loss
         joint, logit  = self.net(data)
 
-        prob = F.log_softmax(joint, dim=-1)
+        if not self.use_smurf:
+            prob = F.log_softmax(joint, dim=-1)
+        else:
+            prob = self.forward(data)[3]
         prob_m = {
             m: F.log_softmax(logit[m], dim=-1) for m in self.modalities
         }
