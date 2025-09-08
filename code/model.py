@@ -63,6 +63,12 @@ class Model(nn.Module):
         self.visuf_input = nn.Conv1d(D_visual, hidden_dim, kernel_size=1, padding=0, bias=False)
         self.smurf_model = ThreeModalityModel(in_dim=hidden_dim, out_dim=hidden_dim, final_dim=6)
         
+        # Fusion layer 
+        self.fusion_layer = nn.Sequential(
+            nn.Linear(12, 64),
+            nn.ReLU(),
+            nn.Linear(64, 6)
+        )
 
     def forward(self, data):
         # legacy pipeline
@@ -106,10 +112,13 @@ class Model(nn.Module):
 
             # now prob_smurf matches joint/logit shape
             prob_smurf = F.log_softmax(prob_smurf, dim=-1)
-
-            # fuse with MMGCN prob
-            prob = (prob + prob_smurf) / 2
-        return prob, prob_m, ratio
+            fused_repr = torch.cat([prob, prob_smurf], dim=-1)  # [sum(lengths), 12]
+            fused_prob = self.fusion_layer(fused_repr)          # Linear/MLP → [sum(lengths), n_classes]    
+            # # fuse with MMGCN prob
+            # prob = (prob + prob_smurf) / 2
+            
+            
+        return prob, prob_m, ratio, fused_prob if self.use_smurf else prob, prob_m, ratio
 
     def get_loss(self, data):
         # Get CoMM loss:
@@ -128,7 +137,7 @@ class Model(nn.Module):
         else:
             comm_loss_values = 0
         # Legacy loss
-        joint, logit = self.net(data)
+        joint, logit  = self.net(data)
 
         prob = F.log_softmax(joint, dim=-1)
         prob_m = {

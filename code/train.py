@@ -183,8 +183,10 @@ def evaluate(model, dataset, args, logger, test=True):
 
             labels = data["label_tensor"]
             golds.append(labels.to("cpu"))
-
-            prob, _, _ = model(data)
+            if not args.use_smurf:
+                prob, _, _ = model(data) 
+            else:
+                _, _, _, prob = model(data)
             nll = criterion(prob, labels)
 
             y_hat = torch.argmax(prob, dim=-1)
