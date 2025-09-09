@@ -27,8 +27,11 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
     device = args.device
     if args.use_smurf and args.use_comm:
         print("Pretraining SMURF module...")
-        for epoch in range(40):
-            for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}, Train loss {loss}")):
+        optim = Optimizer(args.learning_rate, args.weight_decay)
+        optim.set_parameters(smurf_model.parameters(), args.optimizer)
+        smurf_model.to(device)
+        for epoch in range(2):
+            for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}")):
                 smurf_model.zero_grad()
                 data = train_set[idx]
                 for k, v in data.items():
@@ -45,8 +48,12 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 audiof = data["tensor"]['a']
                 visualf = data["tensor"]['v']
                 # SMURF forward
+                textf = (textf.permute(1, 2, 0)).transpose(1, 2)
+                audiof = (audiof.permute(1, 2, 0)).transpose(1, 2)
+                visualf = (visualf.permute(1, 2, 0)).transpose(1, 2)
+                #
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
-                corr_loss = compute_corr_loss(m1, m2, m3)
+                corr_loss, _, _ = compute_corr_loss(m1, m2, m3)
                 # Average prob between smurf and legacy
                 final_logits = final_repr
     
@@ -57,10 +64,9 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                     masked_logits.append(logit_smurf[i, :L])  # keep only valid utterances
                 logit_smurf = torch.cat(masked_logits, dim=0)  # -> [sum(lengths), n_classes]
                 # now prob_smurf matches joint/logit shape
-                prob_smurf = F.log_softmax(prob_smurf, dim=-1)
+                prob_smurf = F.log_softmax(logit_smurf, dim=-1)
                 # predict loss
                 criterion = nn.NLLLoss()
-                optim = Optimizer(args.learning_rate, args.weight_decay) 
                 nll = criterion(prob_smurf, labels)
                 loss = nll + 0.1 * corr_loss
                 loss.backward()
@@ -93,7 +99,7 @@ def train(model: nn.Module,
     
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
     if args.use_smurf and args.use_comm:
-        smurf_model = ThreeModalityModel(in_dim=args.d_state, out_dim=100, final_dim=100).to(device)
+        smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=768, final_dim=768).to(device)
         m1, m2, m3, final_repr = smurf_pretrain(smurf_model, train_set, args)
         # model.smurf_model = smurf_model
         print("SMURF module pretrained.")
@@ -124,9 +130,13 @@ def train(model: nn.Module,
             labels = data["label_tensor"]
             sample_idx = data["uid"]
             if args.use_smurf and args.use_comm:
-                textf = torch.cat(m1, dim = -1) # concatenate m1[0], m1[1], m1[2]  # private, shared1, shared2 
-                audiof = torch.cat(m2, dim = -1)
-                visualf = torch.cat(m3, dim = -1)
+                textf = m1[0] + m1[1] + m1[2]
+                audiof = m2[0] + m2[1] + m2[2]
+                visualf = m3[0] + m3[1] + m3[2]
+                # update data tensor
+                data["tensor"]['t'] = textf
+                data["tensor"]['a'] = audiof
+                data["tensor"]['v'] = visualf
             else:
                 textf = data["tensor"]['t']
                 audiof = data["tensor"]['a']
@@ -244,10 +254,7 @@ def evaluate(model, dataset, args, logger, test=True):
 
             labels = data["label_tensor"]
             golds.append(labels.to("cpu"))
-            if not args.use_smurf:
-                prob, _, _ = model(data) 
-            else:
-                _, _, _, prob = model(data)
+            prob, _, _ = model(data) 
             nll = criterion(prob, labels)
 
             y_hat = torch.argmax(prob, dim=-1)
@@ -296,7 +303,7 @@ def get_argurment():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["iemocap", "meld"],
+        choices=["iemocap", "meld", "iemocap_coid"],
         default="iemocap",
     )
 
@@ -544,7 +551,7 @@ def get_argurment():
 def main(args):
     set_seed(args.seed)
 
-    if args.dataset == "iemocap":
+    if args.dataset == "iemocap" or args.dataset == "iemocap_coid":
         data = load_iemocap()
     if args.dataset == "meld":
         data = load_meld()

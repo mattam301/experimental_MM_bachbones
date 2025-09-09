@@ -57,11 +57,11 @@ class Model(nn.Module):
         hidden_dim = 1024
         # SMURF
         #hardcoded
-        D_text, D_audio, D_visual = 768, 512, 1024
+        D_text, D_audio, D_visual = 768, 512, 1024 #TODO change to args.embedding_dim
         self.textf_input = nn.Conv1d(D_text, hidden_dim, kernel_size=1, padding=0, bias=False)
         self.acouf_input = nn.Conv1d(D_audio, hidden_dim, kernel_size=1, padding=0, bias=False)
         self.visuf_input = nn.Conv1d(D_visual, hidden_dim, kernel_size=1, padding=0, bias=False)
-        self.smurf_model = ThreeModalityModel(in_dim=hidden_dim, out_dim=hidden_dim, final_dim=6)
+        self.smurf_model = ThreeModalityModel(t_dim=D_text, a_dim=D_audio, v_dim=D_visual, out_dim=hidden_dim, final_dim=6)
         
         # Fusion layer 
         self.fusion_layer = nn.Sequential(
@@ -98,7 +98,8 @@ class Model(nn.Module):
         audiof = self.acouf_input(audiof.permute(1, 2, 0)).transpose(1, 2)
         visualf = self.visuf_input(visualf.permute(1, 2, 0)).transpose(1, 2)
         if self.use_comm:
-            z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, all_transformer_out)
+            pass
+            # z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, all_transformer_out)
         if self.use_smurf:
             # # SMURF forward
             # m1, m2, m3, final_repr = self.smurf_model(textf, audiof, visualf)
@@ -125,28 +126,29 @@ class Model(nn.Module):
         return prob, prob_m, ratio
 
     def get_loss(self, data):
-        # Get CoMM loss:
-        # CoMM added
-        if self.use_comm:
-            textf = data["tensor"]['t']
-            audiof = data["tensor"]['a']
-            visualf = data["tensor"]['v']
-            z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, None)
-            comm_loss = CoMMLoss()
-            comm_loss_values = comm_loss({
-                    "aug1_embed": z1,
-                    "aug2_embed": z2,
-                    "prototype": -1  # You need to define/select this somewhere
-                })
-        else:
-            comm_loss_values = 0
+        # # Get CoMM loss:
+        # # CoMM added
+        # if self.use_comm:
+        #     textf = data["tensor"]['t']
+        #     audiof = data["tensor"]['a']
+        #     visualf = data["tensor"]['v']
+        #     z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, None)
+        #     comm_loss = CoMMLoss()
+        #     comm_loss_values = comm_loss({
+        #             "aug1_embed": z1,
+        #             "aug2_embed": z2,
+        #             "prototype": -1  # You need to define/select this somewhere
+        #         })
+        # else:
+        #     comm_loss_values = 0
+        comm_loss_values = 0
         # Legacy loss
         joint, logit  = self.net(data)
 
-        if not self.use_smurf:
-            prob = F.log_softmax(joint, dim=-1)
-        else:
-            prob = self.forward(data)[3]
+        # if not self.use_smurf:
+        prob = F.log_softmax(joint, dim=-1)
+        # else:
+        #     prob = self.forward(data)[3]
         prob_m = {
             m: F.log_softmax(logit[m], dim=-1) for m in self.modalities
         }

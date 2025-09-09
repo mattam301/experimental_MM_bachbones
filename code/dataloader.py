@@ -143,10 +143,14 @@ class Dataloader:
         uid = torch.tensor([s["uid"] for s in samples]).long()
         mx = torch.max(text_len_tensor).item()
         
-        audio_tensor = torch.zeros((batch_size, mx, self.embedding_dim['a']))
-        text_tensor = torch.zeros((batch_size, mx, self.embedding_dim['t']))
-        visual_tensor = torch.zeros((batch_size, mx, self.embedding_dim['v']))
-
+        if self.dataset != "iemocap_coid":
+            audio_tensor = torch.zeros((batch_size, mx, self.embedding_dim['a']))
+            text_tensor = torch.zeros((batch_size, mx, self.embedding_dim['t']))
+            visual_tensor = torch.zeros((batch_size, mx, self.embedding_dim['v']))    
+        else:
+            audio_tensor = torch.zeros((batch_size, mx, 512))
+            text_tensor = torch.zeros((batch_size, mx, 768))
+            visual_tensor = torch.zeros((batch_size, mx, 1024)) # temporary hardcoded for iemocap dataset, fix later
         speaker_tensor = torch.zeros((batch_size, mx)).long()
 
         labels = []
