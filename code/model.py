@@ -89,39 +89,40 @@ class Model(nn.Module):
                 m: scores[m] / min_score
                 for m in self.modalities
             }
-        if self.use_smurf:
-            textf = data["tensor"]['t']
-            audiof = data["tensor"]['a']
-            visualf = data["tensor"]['v']
-            # apply temporal convolution
-            textf = self.textf_input(textf.permute(1, 2, 0)).transpose(1, 2)
-            audiof = self.acouf_input(audiof.permute(1, 2, 0)).transpose(1, 2)
-            visualf = self.visuf_input(visualf.permute(1, 2, 0)).transpose(1, 2)
-            # SMURF forward
-            m1, m2, m3, final_repr = self.smurf_model(textf, audiof, visualf)
-            corr_loss = compute_corr_loss(m1, m2, m3)
-            # Average prob between smurf and legacy
-            final_logits = final_repr
-  
-            # mask out padding and flatten (hot fix)
-            logit_smurf = final_logits.permute(1, 0, 2)  # -> [batch, seq, n_classes]
-            masked_logits = []
-            for i, L in enumerate(data["length"]):  # lengths per dialogue
-                masked_logits.append(logit_smurf[i, :L])  # keep only valid utterances
-            logit_smurf = torch.cat(masked_logits, dim=0)  # -> [sum(lengths), n_classes]
-
-            # now prob_smurf matches joint/logit shape
-            # prob_smurf = F.log_softmax(prob_smurf, dim=-1)
-            fused_repr = torch.cat([joint, logit_smurf], dim=-1)  # [sum(lengths), 12]
-            fused_logits = self.fusion_layer(fused_repr)          # Linear/MLP → [sum(lengths), n_classes] 
-            fused_prob = F.log_softmax(fused_logits, dim=-1)
-            # # fuse with MMGCN prob
-            # prob = (prob + prob_smurf) / 2
             
-        if self.use_smurf:   
-            return prob, prob_m, ratio, fused_prob 
-        else:
-            return prob, prob_m, ratio, prob
+        textf = data["tensor"]['t']
+        audiof = data["tensor"]['a']
+        visualf = data["tensor"]['v']
+        # apply temporal convolution
+        textf = self.textf_input(textf.permute(1, 2, 0)).transpose(1, 2)
+        audiof = self.acouf_input(audiof.permute(1, 2, 0)).transpose(1, 2)
+        visualf = self.visuf_input(visualf.permute(1, 2, 0)).transpose(1, 2)
+        if self.use_comm:
+            z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, all_transformer_out)
+        if self.use_smurf:
+            # # SMURF forward
+            # m1, m2, m3, final_repr = self.smurf_model(textf, audiof, visualf)
+            # corr_loss = compute_corr_loss(m1, m2, m3)
+            # # Average prob between smurf and legacy
+            # final_logits = final_repr
+  
+            # # mask out padding and flatten (hot fix)
+            # logit_smurf = final_logits.permute(1, 0, 2)  # -> [batch, seq, n_classes]
+            # masked_logits = []
+            # for i, L in enumerate(data["length"]):  # lengths per dialogue
+            #     masked_logits.append(logit_smurf[i, :L])  # keep only valid utterances
+            # logit_smurf = torch.cat(masked_logits, dim=0)  # -> [sum(lengths), n_classes]
+
+            # # now prob_smurf matches joint/logit shape
+            # # prob_smurf = F.log_softmax(prob_smurf, dim=-1)
+            # fused_repr = torch.cat([joint, logit_smurf], dim=-1)  # [sum(lengths), 12]
+            # fused_logits = self.fusion_layer(fused_repr)          # Linear/MLP → [sum(lengths), n_classes] 
+            # fused_prob = F.log_softmax(fused_logits, dim=-1)
+            # # # fuse with MMGCN prob
+            # # prob = (prob + prob_smurf) / 2
+            pass
+            
+        return prob, prob_m, ratio
 
     def get_loss(self, data):
         # Get CoMM loss:

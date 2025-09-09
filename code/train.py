@@ -19,9 +19,58 @@ from dataloader import load_iemocap, load_meld, Dataloader
 from optimizer import Optimizer
 from utils import set_seed, weight_visualize
 import json
+from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
 
-
+def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args):
+    m1, m2, m3, final_repr = None, None, None, None
+    device = args.device
+    if args.use_smurf and args.use_comm:
+        print("Pretraining SMURF module...")
+        for epoch in range(40):
+            for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}, Train loss {loss}")):
+                smurf_model.zero_grad()
+                data = train_set[idx]
+                for k, v in data.items():
+                    if k == "utterance_texts":
+                        continue
+                    if k == "tensor":
+                        for m, feat in data[k].items():
+                            data[k][m] = feat.to(device)
+                    else:
+                        data[k] = v.to(device)
+                labels = data["label_tensor"]
+                sample_idx = data["uid"]
+                textf = data["tensor"]['t']
+                audiof = data["tensor"]['a']
+                visualf = data["tensor"]['v']
+                # SMURF forward
+                m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
+                corr_loss = compute_corr_loss(m1, m2, m3)
+                # Average prob between smurf and legacy
+                final_logits = final_repr
+    
+                # mask out padding and flatten (hot fix)
+                logit_smurf = final_logits.permute(1, 0, 2)  # -> [batch, seq, n_classes]
+                masked_logits = []
+                for i, L in enumerate(data["length"]):  # lengths per dialogue
+                    masked_logits.append(logit_smurf[i, :L])  # keep only valid utterances
+                logit_smurf = torch.cat(masked_logits, dim=0)  # -> [sum(lengths), n_classes]
+                # now prob_smurf matches joint/logit shape
+                prob_smurf = F.log_softmax(prob_smurf, dim=-1)
+                # predict loss
+                criterion = nn.NLLLoss()
+                optim = Optimizer(args.learning_rate, args.weight_decay) 
+                nll = criterion(prob_smurf, labels)
+                loss = nll + 0.1 * corr_loss
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    smurf_model.parameters(), max_norm=args.grad_norm_max, norm_type=args.grad_norm)
+                optim.step()
+                pbar.set_description(f"Pretrained Epoch {epoch+1}, Pretrain loss {loss:,.4f}")
+                
+    return m1, m2, m3, final_repr
+    
 def train(model: nn.Module,
           train_set: Dataloader,
           dev_set: Dataloader,
@@ -42,6 +91,13 @@ def train(model: nn.Module,
 
     early_stopping_count = 0
     
+    ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
+    if args.use_smurf and args.use_comm:
+        smurf_model = ThreeModalityModel(in_dim=args.d_state, out_dim=100, final_dim=100).to(device)
+        m1, m2, m3, final_repr = smurf_pretrain(smurf_model, train_set, args)
+        # model.smurf_model = smurf_model
+        print("SMURF module pretrained.")
+    ## legacy training module/backbone
     for epoch in range(args.epochs):
         start_time = time.time()
         total_take_sample = 0
@@ -67,9 +123,14 @@ def train(model: nn.Module,
                     data[k] = v.to(device)
             labels = data["label_tensor"]
             sample_idx = data["uid"]
-            textf = data["tensor"]['t']
-            audiof = data["tensor"]['a']
-            visualf = data["tensor"]['v']
+            if args.use_smurf and args.use_comm:
+                textf = torch.cat(m1, dim = -1) # concatenate m1[0], m1[1], m1[2]  # private, shared1, shared2 
+                audiof = torch.cat(m2, dim = -1)
+                visualf = torch.cat(m3, dim = -1)
+            else:
+                textf = data["tensor"]['t']
+                audiof = data["tensor"]['a']
+                visualf = data["tensor"]['v']
             textf, audiof, visualf = textf.to(device), audiof.to(device), visualf.to(device)
             
 
@@ -434,11 +495,17 @@ def get_argurment():
             "a": 300,
             "t": 768,
             "v": 342,
-        }
+        },
+        "iemocap_coid": { # all dim 768
+            "a": 768,
+            "t": 768,
+            "v": 768,
+        },
     }
 
     args.dataset_label_dict = {
         "iemocap": {"hap": 0, "sad": 1, "neu": 2, "ang": 3, "exc": 4, "fru": 5},
+        "iemocap_coid": {"hap": 0, "sad": 1, "neu": 2, "ang": 3, "exc": 4, "fru": 5},
         "iemocap_4": {"hap": 0, "sad": 1, "neu": 2, "ang": 3},
         "meld": {"neu": 0, "sup": 1, "fea": 2, "sad": 3, "joy": 4, "dis": 5, "ang": 6},
         "mosei7": {
@@ -456,6 +523,7 @@ def get_argurment():
 
     args.dataset_num_speakers = {
         "iemocap": 2,
+        "iemocap_coid": 2,
         "iemocap_4": 2,
         "mosei7": 1,
         "mosei2": 1,
