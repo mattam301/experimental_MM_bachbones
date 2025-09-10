@@ -30,7 +30,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
         optim = Optimizer(args.learning_rate, args.weight_decay)
         optim.set_parameters(smurf_model.parameters(), args.optimizer)
         smurf_model.to(device)
-        for epoch in range(2):
+        for epoch in range(20):
             for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}")):
                 smurf_model.zero_grad()
                 data = train_set[idx]
@@ -47,7 +47,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 textf = data["tensor"]['t']
                 audiof = data["tensor"]['a']
                 visualf = data["tensor"]['v']
-                # SMURF forward
+
                 textf = (textf.permute(1, 2, 0)).transpose(1, 2)
                 audiof = (audiof.permute(1, 2, 0)).transpose(1, 2)
                 visualf = (visualf.permute(1, 2, 0)).transpose(1, 2)
@@ -73,9 +73,9 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 torch.nn.utils.clip_grad_norm_(
                     smurf_model.parameters(), max_norm=args.grad_norm_max, norm_type=args.grad_norm)
                 optim.step()
-                pbar.set_description(f"Pretrained Epoch {epoch+1}, Pretrain loss {loss:,.4f}")
+                pbar.set_description(f"Pretrained Epoch {epoch+1}, Pretrain loss {loss:,.4f}, Corr loss {corr_loss:,.4f}")
                 
-    return m1, m2, m3, final_repr
+    return m1, m2, m3, final_repr, smurf_model
     
 def train(model: nn.Module,
           train_set: Dataloader,
@@ -96,11 +96,12 @@ def train(model: nn.Module,
     optimizer.set_parameters(model.parameters(), args.optimizer)
 
     early_stopping_count = 0
-    
+    smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=768, final_dim=768).to(device)
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
     if args.use_smurf and args.use_comm:
-        smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=768, final_dim=768).to(device)
-        m1, m2, m3, final_repr = smurf_pretrain(smurf_model, train_set, args)
+        # smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=768, final_dim=768).to(device)
+        _, _, _, _, smurf_model = smurf_pretrain(smurf_model, train_set, args)
+        # print(m1[0].shape, m2[0].shape, m3[0].shape, final_repr.shape)
         # model.smurf_model = smurf_model
         print("SMURF module pretrained.")
     ## legacy training module/backbone
@@ -130,13 +131,21 @@ def train(model: nn.Module,
             labels = data["label_tensor"]
             sample_idx = data["uid"]
             if args.use_smurf and args.use_comm:
+                x1 = data["tensor"]['t']
+                x2 = data["tensor"]['a']
+                x3 = data["tensor"]['v']
+                textf = (x1.permute(1, 2, 0)).transpose(1, 2)
+                audiof = (x2.permute(1, 2, 0)).transpose(1, 2)
+                visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
+                m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 textf = m1[0] + m1[1] + m1[2]
                 audiof = m2[0] + m2[1] + m2[2]
                 visualf = m3[0] + m3[1] + m3[2]
                 # update data tensor
-                data["tensor"]['t'] = textf
-                data["tensor"]['a'] = audiof
-                data["tensor"]['v'] = visualf
+                # check
+                data["tensor"]['t'] = textf.transpose(0,1)
+                data["tensor"]['a'] = audiof.transpose(0,1)
+                data["tensor"]['v'] = visualf.transpose(0,1)
             else:
                 textf = data["tensor"]['t']
                 audiof = data["tensor"]['a']
@@ -179,7 +188,7 @@ def train(model: nn.Module,
             rate = total_take_sample / total_sample
             print(f"[Rate: {rate}, Threshold: {model.threshold}]")
 
-        dev_f1, dev_acc, dev_loss = evaluate(model, dev_set, args, logger, test=False)
+        dev_f1, dev_acc, dev_loss = evaluate(model, smurf_model, dev_set, args, logger, test=False)
         print(f"[Dev Loss: {dev_loss}]\n[Dev F1: {dev_f1}]\n[Dev Acc: {dev_acc}]")
 
         if args.use_cl:
@@ -201,7 +210,7 @@ def train(model: nn.Module,
         if best_dev_f1 is None or dev_f1 > best_dev_f1:
             best_dev_f1 = dev_f1
             best_test_f1, _, _ = evaluate(
-                model, test_set, args, logger, test=False)
+                model, smurf_model, test_set, args, logger, test=False)
             best_state = copy.deepcopy(model.state_dict())
             best_epoch = epoch
             early_stopping_count = 0
@@ -216,7 +225,7 @@ def train(model: nn.Module,
     print(f"Best model at epoch: {best_epoch}")
     print(f"Best dev F1: {best_dev_f1}")
     model.load_state_dict(best_state)
-    f1, acc, _ = evaluate(model, test_set, args, logger, test=True)
+    f1, acc, _ = evaluate(model, smurf_model, test_set, args, logger, test=True)
     print(f"Best test F1: {f1}")
     print(f"Best test Acc: {acc}")
 
@@ -228,7 +237,7 @@ def train(model: nn.Module,
     return best_dev_f1, best_test_f1, best_state
 
 
-def evaluate(model, dataset, args, logger, test=True):
+def evaluate(model, smurf_model, dataset, args, logger, test=True):
     criterion = nn.NLLLoss()
 
     device = args.device
@@ -251,7 +260,22 @@ def evaluate(model, dataset, args, logger, test=True):
                         data[k][m] = feat.to(device)
                 else:
                     data[k] = v.to(device)
-
+            if args.use_smurf and args.use_comm:
+                x1 = data["tensor"]['t']
+                x2 = data["tensor"]['a']
+                x3 = data["tensor"]['v']
+                textf = (x1.permute(1, 2, 0)).transpose(1, 2)
+                audiof = (x2.permute(1, 2, 0)).transpose(1, 2)
+                visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
+                m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
+                textf = m1[0] + m1[1] + m1[2]
+                audiof = m2[0] + m2[1] + m2[2]
+                visualf = m3[0] + m3[1] + m3[2]
+                # update data tensor
+                # check
+                data["tensor"]['t'] = textf.transpose(0,1)
+                data["tensor"]['a'] = audiof.transpose(0,1)
+                data["tensor"]['v'] = visualf.transpose(0,1)
             labels = data["label_tensor"]
             golds.append(labels.to("cpu"))
             prob, _, _ = model(data) 
