@@ -150,8 +150,9 @@ def train(model: nn.Module,
                 visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 ## Zone for CoMM augmentation on shared mutation
-                m1[1] = m1[1] + torch.randn_like(m1[1]) * 0.1
-                m2[1] = m2[1] + torch.randn_like(m2[1]) * 0.1
+                # add Gaussian noise to the shared component
+                m1 = (m1[0], m1[1] + torch.randn_like(m1[1]) * 0.1, m1[2])
+                m2 = (m2[0], m2[1] + torch.randn_like(m2[1]) * 0.1, m2[2])
                 # m3[1] = m3[1] + torch.randn_like(m3[1]) * 0.1
                 ## end zone
                 textf = m1[0] + m1[1] + m1[2]
