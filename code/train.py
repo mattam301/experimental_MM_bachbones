@@ -158,22 +158,22 @@ def train(model: nn.Module,
             total_sample += len(labels)
             
             
-            loss = nll.item()
-            if type(comm_loss_value) != int:
-              loss += comm_loss_value["loss"].item()
-            else:
-              pass
-            _loss += loss
+            loss = nll
+            if not isinstance(comm_loss_value, int):
+                loss = loss + comm_loss_value["loss"]
+
+            _loss += loss.item()
             for m in modalities:
                 loss_m[m] += uni_nll[m].item()
-            nll.backward()
+
+            loss.backward()
 
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), max_norm=args.grad_norm_max, norm_type=args.grad_norm)
 
             optimizer.step()
             
-            pbar.set_description(f"Epoch {epoch+1}, Train loss {loss:,.4f}")
+            pbar.set_description(f"Epoch {epoch+1}, Train loss {loss.item():,.4f}")
 
             del data
 
