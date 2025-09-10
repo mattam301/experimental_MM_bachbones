@@ -115,11 +115,6 @@ def train(model: nn.Module,
         # model.smurf_model = smurf_model
         print("SMURF module pretrained.")
     
-    # augmentation for comm initialization
-    if args.use_comm:
-        model.augment_1 = modality_representation_linear_augmentation()
-        model.augment_2 = modality_representation_linear_augmentation()
-
     ## legacy training module/backbone
     for epoch in range(args.epochs):
         start_time = time.time()
@@ -155,8 +150,9 @@ def train(model: nn.Module,
                 visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 ## Zone for CoMM augmentation on shared mutation
-                m1[1] = model.augment_1(m1[1])
-                m2[1] = model.augment_2(m2[1])
+                m1[1] = m1[1] + torch.randn_like(m1[1]) * 0.1
+                m2[1] = m2[1] + torch.randn_like(m2[1]) * 0.1
+                # m3[1] = m3[1] + torch.randn_like(m3[1]) * 0.1
                 ## end zone
                 textf = m1[0] + m1[1] + m1[2]
                 audiof = m2[0] + m2[1] + m2[2]
