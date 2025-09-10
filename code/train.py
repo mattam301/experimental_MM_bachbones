@@ -22,6 +22,17 @@ import json
 from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
 
+def modality_representation_linear_augmentation(x):
+        # Using a simple Linear layer to augment the representation and return a new representation of the same shape
+        # making sure all tensors are on the same device
+        # print(x[0].device)
+        augmentation_layer = nn.Linear(x[0].size(-1), x[0].size(-1)).to(x[0].device)
+        x_aug = [augmentation_layer(x_i) for x_i in x]
+        assert all(x_aug_i.size() == x_i.size() for x_aug_i, x_i in zip(x_aug, x)), \
+            f"Augmented representation size {x_aug} does not match original size {x}"
+        # # Using a ReLU activation function to introduce non-linearity
+        x_aug = [F.relu(x_aug_i) for x_aug_i in x_aug]
+        return x_aug
 def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args):
     m1, m2, m3, final_repr = None, None, None, None
     device = args.device
@@ -103,6 +114,12 @@ def train(model: nn.Module,
         # print(m1[0].shape, m2[0].shape, m3[0].shape, final_repr.shape)
         # model.smurf_model = smurf_model
         print("SMURF module pretrained.")
+    
+    # augmentation for comm initialization
+    if args.use_comm:
+        model.augment_1 = modality_representation_linear_augmentation()
+        model.augment_2 = modality_representation_linear_augmentation()
+
     ## legacy training module/backbone
     for epoch in range(args.epochs):
         start_time = time.time()
@@ -137,6 +154,10 @@ def train(model: nn.Module,
                 audiof = (x2.permute(1, 2, 0)).transpose(1, 2)
                 visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
+                ## Zone for CoMM augmentation on shared mutation
+                m1[1] = model.augment_1(m1[1])
+                m2[1] = model.augment_2(m2[1])
+                ## end zone
                 textf = m1[0] + m1[1] + m1[2]
                 audiof = m2[0] + m2[1] + m2[2]
                 visualf = m3[0] + m3[1] + m3[2]
