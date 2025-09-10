@@ -55,7 +55,7 @@ class CoMM(nn.Module):
         super().__init__()
         
         #hardcoded
-        D_text, D_audio, D_visual = 768, 512, 1024
+        D_text, D_audio, D_visual = 1024, 1024, 1024
         # Temporal convolutional layers
         self.textf_input = nn.Conv1d(D_text, hidden_dim, kernel_size=1, padding=0, bias=False)
         self.acouf_input = nn.Conv1d(D_audio, hidden_dim, kernel_size=1, padding=0, bias=False)

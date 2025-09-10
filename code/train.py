@@ -30,7 +30,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
         optim = Optimizer(args.learning_rate, args.weight_decay)
         optim.set_parameters(smurf_model.parameters(), args.optimizer)
         smurf_model.to(device)
-        for epoch in range(20):
+        for epoch in range(50):
             for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}")):
                 smurf_model.zero_grad()
                 data = train_set[idx]
@@ -96,10 +96,9 @@ def train(model: nn.Module,
     optimizer.set_parameters(model.parameters(), args.optimizer)
 
     early_stopping_count = 0
-    smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=768, final_dim=768).to(device)
+    smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=1024, final_dim=1024).to(device)
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
     if args.use_smurf and args.use_comm:
-        # smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=768, final_dim=768).to(device)
         _, _, _, _, smurf_model = smurf_pretrain(smurf_model, train_set, args)
         # print(m1[0].shape, m2[0].shape, m3[0].shape, final_repr.shape)
         # model.smurf_model = smurf_model
@@ -528,9 +527,9 @@ def get_argurment():
             "v": 342,
         },
         "iemocap_coid": { # all dim 768
-            "a": 768,
-            "t": 768,
-            "v": 768,
+            "a": 1024,
+            "t": 1024,
+            "v": 1024,
         },
     }
 
