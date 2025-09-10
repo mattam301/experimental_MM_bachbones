@@ -108,7 +108,6 @@ class Model(nn.Module):
                 })
         else:
             comm_loss_values = 0
-        comm_loss_values = 0
         # Legacy loss
         joint, logit  = self.net(data)
 
