@@ -90,11 +90,11 @@ def generate_all_data_versions(self, data, smurf_model):
         
         # Original data
         ori_data = copy.deepcopy(data)
-        # concat instead of sum
+        # concat instead of sum -> tensor dim x 3
         ori_data["tensor"] = {
-            "t": torch.cat([m1[0], m1[1], m1[2]], dim=0),
-            "a": torch.cat([m2[0], m2[1], m2[2]], dim=0),
-            "v": torch.cat([m3[0], m3[1], m3[2]], dim=0),
+            "t": torch.cat([m1[0], m1[1], m1[2]], dim=-1),
+            "a": torch.cat([m2[0], m2[1], m2[2]], dim=-1),
+            "v": torch.cat([m3[0], m3[1], m3[2]], dim=-1),
         }
         data_versions.append(ori_data)
         # Masked data (one modality left unmasked at a time)
@@ -116,9 +116,9 @@ def generate_all_data_versions(self, data, smurf_model):
         augment1_3 = m3[1] + torch.randn_like(m3[1]) * 0.2
         augmented_data = copy.deepcopy(data)
         augmented_data["tensor"] = {
-            "t": torch.cat([m1[0], augment1_1, m1[2]], dim=0),
-            "a": torch.cat([m2[0], augment1_2, m2[2]], dim=0),
-            "v": torch.cat([m3[0], augment1_3, m3[2]], dim=0),
+            "t": torch.cat([m1[0], augment1_1, m1[2]], dim=-1),
+            "a": torch.cat([m2[0], augment1_2, m2[2]], dim=-1),
+            "v": torch.cat([m3[0], augment1_3, m3[2]], dim=-1),
         }
         data_versions.append(augmented_data)
 
@@ -127,9 +127,9 @@ def generate_all_data_versions(self, data, smurf_model):
         augment2_2 = m2[1] + torch.randn_like(m2[1]) * 0.2
         augment2_3 = m3[1] + torch.randn_like(m3[1]) * 0.2
         augmented_data["tensor"] = {
-            "t": torch.cat([m1[0], augment2_1, m1[2]], dim=0),
-            "a": torch.cat([m2[0], augment2_2, m2[2]], dim=0),
-            "v": torch.cat([m3[0], augment2_3, m3[2]], dim=0),
+            "t": torch.cat([m1[0], augment2_1, m1[2]], dim=-1),
+            "a": torch.cat([m2[0], augment2_2, m2[2]], dim=-1),
+            "v": torch.cat([m3[0], augment2_3, m3[2]], dim=-1),
         }
         data_versions.append(augmented_data)
         
@@ -195,15 +195,9 @@ def train(model: nn.Module,
             
             # Generate all data versions (include original, 3 masked, 2 augmented)
             data_versions = generate_all_data_versions(model, data, smurf_model) if args.use_comm else [data]
-            # print(f"Generated {len(data_versions)} data versions.")
-            # separate
             ori_data = data_versions[0]
             masked_data_versions = data_versions[1:1+len(modalities)]
             augmented_data_versions = data_versions[1+len(modalities):]
-            # inspect and compare masked data and augmented data
-            print(len(masked_data_versions))
-            print(len(augmented_data_versions))
-            ## Get output with each data version
             # masked outputs
             rep_masked = []
             for masked_data in masked_data_versions:
@@ -230,7 +224,7 @@ def train(model: nn.Module,
                 comm_loss = comm_loss / 2
                 comm_loss_aug = info_nce_loss(rep_augmented[0], rep_augmented[1], temperature=0.7)
                 comm_loss += comm_loss_aug
-                print(f"CoMM loss: {comm_loss.item()}")
+                # print(f"CoMM loss: {comm_loss.item()}")
             nll, ratio, take_samp, uni_nll = model.get_loss(ori_data)
             total_take_sample += take_samp
             total_sample += len(labels)
@@ -341,9 +335,9 @@ def evaluate(model, smurf_model, dataset, args, logger, test=True):
                 audiof = (x2.permute(1, 2, 0)).transpose(1, 2)
                 visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
-                textf = m1[0] + m1[1] + m1[2]
-                audiof = m2[0] + m2[1] + m2[2]
-                visualf = m3[0] + m3[1] + m3[2]
+                textf = torch.cat([m1[0], m1[1], m1[2]], dim=-1)
+                audiof = torch.cat([m2[0], m2[1], m2[2]], dim=-1)
+                visualf = torch.cat([m3[0], m3[1], m3[2]], dim=-1)
                 # update data tensor
                 # check
                 data["tensor"]['t'] = textf.transpose(0,1)
