@@ -28,30 +28,6 @@ class Model(nn.Module):
         self.growing_factor = args.cl_growth
         
         self.use_comm = args.use_comm
-        # CoMM
-        n_modalities = 3
-        input_dims = [1024, 1024, 1024]
-        input_adapters: List[nn.Module] = [
-            nn.Linear(in_dim, 1024) for in_dim in input_dims
-        ]
-        from comm import CoMM
-        comm_fuse = MMFusion(
-        input_adapters=input_adapters,
-        embed_dim=1024,
-        fusion="concat",   # or "x-attn"
-        pool="cls",        # or "mean"
-        n_heads=4,
-        n_layers=1,
-        add_bias_kv=False,
-        dropout=0.1
-    )
-        
-        self.comm_module = CoMM(
-            comm_enc=comm_fuse, 
-            hidden_dim=1024, 
-            n_classes=6, 
-            augmentation_style="linear", 
-        )   
     def forward(self, data):
         # legacy pipeline
         joint, logit, feat = self.net(data)
@@ -75,28 +51,10 @@ class Model(nn.Module):
         return prob, prob_m, ratio
 
     def get_loss(self, data):
-        # Get CoMM loss:
-        # CoMM added
-        if self.use_comm:
-            textf = data["tensor"]['t']
-            audiof = data["tensor"]['a']
-            visualf = data["tensor"]['v']
-            z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, None)
-            print("z1 shape: ", z1[0].shape)
-            print("z2 shape: ", z2[3].shape)
-            comm_loss = CoMMLoss()
-            comm_loss_values = comm_loss({
-                    "aug1_embed": z1,
-                    "aug2_embed": z2,
-                    "prototype": -1  # You need to define/select this somewhere
-                })
-        else:
-            comm_loss_values = 0
         # Legacy loss
-        data_versions = self.generate_all_data_versions(data)
-        print(f"Generated {len(data_versions)} data versions for CoMM.")
         joint, logit, feat = self.net(data)
-
+        
+        comm_loss = CoMMLoss()
         prob = F.log_softmax(joint, dim=-1)
         prob_m = {
             m: F.log_softmax(logit[m], dim=-1) for m in self.modalities
@@ -141,7 +99,7 @@ class Model(nn.Module):
 
         take_sample = torch.sum(v)
 
-        return loss.mean(), ratio, take_sample, loss_m, comm_loss_values # hardcoded comm loss for now
+        return loss.mean(), ratio, take_sample, loss_m # hardcoded comm loss for now
 
     def hard_regularization(self, scores, loss):
         if self.args.use_cl:
@@ -155,32 +113,4 @@ class Model(nn.Module):
         self.threshold *= self.growing_factor
         if self.threshold > 60:
             self.threshold = 60
-    def generate_all_data_versions(self, data):
-        data_versions = []
-        # Original data
-        data_versions.append(data)
-        # # Augmented data
-        # augmented_data = {}
-        # for m in self.modalities:
-        #     augmented_data[m] = self.augment_modality(data["tensor"][m])
-        # data_versions.append({
-        #     "tensor": augmented_data,
-        #     "length": data["length"],
-        #     "label_tensor": data["label_tensor"],
-        #     "speaker_tensor": data["speaker_tensor"]
-        # })
-        # Masked data (one modality left unmasked at a time)
-        for i, m in enumerate(self.modalities):
-            masked_data = {}
-            for j, m2 in enumerate(self.modalities):
-                if i == j:
-                    masked_data[m2] = data["tensor"][m2]
-                else:
-                    masked_data[m2] = torch.zeros_like(data["tensor"][m2])
-            data_versions.append({
-                "tensor": masked_data,
-                "length": data["length"],
-                "label_tensor": data["label_tensor"],
-                "speaker_tensor": data["speaker_tensor"]
-            })
-        return data_versions
+    

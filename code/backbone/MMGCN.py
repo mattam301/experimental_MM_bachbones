@@ -75,13 +75,13 @@ class MMGCN(nn.Module):
         adj = self.create_big_adj(rep_list, lengths.tolist(), self.modalities)
 
         features = torch.cat(rep_list, dim=0)
-        print("Feature shape Before: ",features.shape)
+        # print("Feature shape Before: ",features.shape)
         features, layer_inners = self.graph_net(features, None, spk_idx, adj)
-        print("Feature shape After: ",features.shape)
+        # print("Feature shape After: ",features.shape)
 
 
         all_length = rep_list[0].shape[0]
-        print("All lengths: ", all_length)
+        # print("All lengths: ", all_length)
 
         rep = {}
         for j, m in enumerate(self.modalities):

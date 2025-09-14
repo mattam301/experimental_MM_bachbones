@@ -51,6 +51,8 @@ class CoMMLoss(nn.Module):
         z1, z2, prototype = outputs["aug1_embed"], outputs["aug2_embed"], outputs["prototype"]
         assert len(z1) == len(z2)
         n_emb = len(z1)
+        # print(z1)
+        # print(type(z1))
         z1 = [func.normalize(z, p=2, dim=-1) for z in z1]
         z2 = [func.normalize(z, p=2, dim=-1) for z in z2]
         Z = all_gather_batch_with_grad(z1 + z2)

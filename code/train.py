@@ -6,6 +6,8 @@ import argparse
 import os
 import time
 from datetime import datetime
+from comm_loss import CoMMLoss 
+
 
 import numpy as np
 import torch
@@ -13,26 +15,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn import metrics
 
-from cl import SPLLoss, DialogSPCLLoss
 from model import Model
 from dataloader import load_iemocap, load_meld, Dataloader
 from optimizer import Optimizer
-from utils import set_seed, weight_visualize
+from utils import set_seed, weight_visualize, info_nce_loss
 import json
 from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
-
-def modality_representation_linear_augmentation(x):
-        # Using a simple Linear layer to augment the representation and return a new representation of the same shape
-        # making sure all tensors are on the same device
-        # print(x[0].device)
-        augmentation_layer = nn.Linear(x[0].size(-1), x[0].size(-1)).to(x[0].device)
-        x_aug = [augmentation_layer(x_i) for x_i in x]
-        assert all(x_aug_i.size() == x_i.size() for x_aug_i, x_i in zip(x_aug, x)), \
-            f"Augmented representation size {x_aug} does not match original size {x}"
-        # # Using a ReLU activation function to introduce non-linearity
-        x_aug = [F.relu(x_aug_i) for x_aug_i in x_aug]
-        return x_aug
 def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args):
     m1, m2, m3, final_repr = None, None, None, None
     device = args.device
@@ -41,7 +30,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
         optim = Optimizer(args.learning_rate, args.weight_decay)
         optim.set_parameters(smurf_model.parameters(), args.optimizer)
         smurf_model.to(device)
-        for epoch in range(8):
+        for epoch in range(2):
             for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}")):
                 smurf_model.zero_grad()
                 data = train_set[idx]
@@ -87,7 +76,71 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 pbar.set_description(f"Pretrained Epoch {epoch+1}, Pretrain loss {loss:,.4f}, Corr loss {corr_loss:,.4f}")
                 
     return m1, m2, m3, final_repr, smurf_model
-    
+
+def generate_all_data_versions(self, data, smurf_model):
+        data_versions = []
+        # data refinement
+        x1 = data["tensor"]['t']
+        x2 = data["tensor"]['a']
+        x3 = data["tensor"]['v']
+        textf = (x1.permute(1, 2, 0)).transpose(1, 2)
+        audiof = (x2.permute(1, 2, 0)).transpose(1, 2)
+        visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
+        m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
+        
+        # Original data
+        ori_data = copy.deepcopy(data)
+        # concat instead of sum
+        ori_data["tensor"] = {
+            "t": torch.cat([m1[0], m1[1], m1[2]], dim=0),
+            "a": torch.cat([m2[0], m2[1], m2[2]], dim=0),
+            "v": torch.cat([m3[0], m3[1], m3[2]], dim=0),
+        }
+        data_versions.append(ori_data)
+        # Masked data (one modality left unmasked at a time)
+        for i, m in enumerate(self.modalities):
+            masked_data = {}
+            for j, m in enumerate(self.modalities):
+                if i == j:
+                    masked_data[m] = ori_data["tensor"][m]
+                else:
+                    masked_data[m] = torch.zeros_like(ori_data["tensor"][m])
+            data_versions.append({
+                "tensor": masked_data,
+                "length": data["length"],
+                "label_tensor": data["label_tensor"],
+                "speaker_tensor": data["speaker_tensor"]
+            })
+        augment1_1 = m1[1] + torch.randn_like(m1[1]) * 0.2
+        augment1_2 = m2[1] + torch.randn_like(m2[1]) * 0.2
+        augment1_3 = m3[1] + torch.randn_like(m3[1]) * 0.2
+        augmented_data = copy.deepcopy(data)
+        augmented_data["tensor"] = {
+            "t": torch.cat([m1[0], augment1_1, m1[2]], dim=0),
+            "a": torch.cat([m2[0], augment1_2, m2[2]], dim=0),
+            "v": torch.cat([m3[0], augment1_3, m3[2]], dim=0),
+        }
+        data_versions.append(augmented_data)
+
+        augmented_data = copy.deepcopy(data)
+        augment2_1 = m1[1] + torch.randn_like(m1[1]) * 0.2
+        augment2_2 = m2[1] + torch.randn_like(m2[1]) * 0.2
+        augment2_3 = m3[1] + torch.randn_like(m3[1]) * 0.2
+        augmented_data["tensor"] = {
+            "t": torch.cat([m1[0], augment2_1, m1[2]], dim=0),
+            "a": torch.cat([m2[0], augment2_2, m2[2]], dim=0),
+            "v": torch.cat([m3[0], augment2_3, m3[2]], dim=0),
+        }
+        data_versions.append(augmented_data)
+        
+        # transpose all versions back to original shape
+        for version in data_versions:
+            version["tensor"] = {
+                m: feat.transpose(0, 1) if isinstance(feat, torch.Tensor) else (feat[0].transpose(0,1), feat[1].transpose(0,1), feat[2].transpose(0,1))
+                for m, feat in version["tensor"].items()
+            }
+
+        return data_versions
 def train(model: nn.Module,
           train_set: Dataloader,
           dev_set: Dataloader,
@@ -107,12 +160,10 @@ def train(model: nn.Module,
     optimizer.set_parameters(model.parameters(), args.optimizer)
 
     early_stopping_count = 0
-    smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=1024, final_dim=1024).to(device)
+    smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=256, final_dim=256).to(device)
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
     if args.use_smurf and args.use_comm:
         _, _, _, _, smurf_model = smurf_pretrain(smurf_model, train_set, args)
-        # print(m1[0].shape, m2[0].shape, m3[0].shape, final_repr.shape)
-        # model.smurf_model = smurf_model
         print("SMURF module pretrained.")
     
     ## legacy training module/backbone
@@ -141,45 +192,50 @@ def train(model: nn.Module,
                     data[k] = v.to(device)
             labels = data["label_tensor"]
             sample_idx = data["uid"]
-            if args.use_smurf and args.use_comm:
-                x1 = data["tensor"]['t']
-                x2 = data["tensor"]['a']
-                x3 = data["tensor"]['v']
-                textf = (x1.permute(1, 2, 0)).transpose(1, 2)
-                audiof = (x2.permute(1, 2, 0)).transpose(1, 2)
-                visualf = (x3.permute(1, 2, 0)).transpose(1, 2)
-                m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
-                ## Zone for CoMM augmentation on shared mutation
-                # add Gaussian noise to the shared component
-                # m1 = (m1[0], m1[1] + torch.randn_like(m1[1]) * 0.1, m1[2])
-                # m2 = (m2[0], m2[1] + torch.randn_like(m2[1]) * 0.1, m2[2])
-                
-                ## end zone
-                textf = m1[0] + m1[1] + m1[2]
-                audiof = m2[0] + m2[1] + m2[2]
-                visualf = m3[0] + m3[1] + m3[2]
-                # update data tensor
-                # check
-                data["tensor"]['t'] = textf.transpose(0,1)
-                data["tensor"]['a'] = audiof.transpose(0,1)
-                data["tensor"]['v'] = visualf.transpose(0,1)
-            else:
-                textf = data["tensor"]['t']
-                audiof = data["tensor"]['a']
-                visualf = data["tensor"]['v']
-            textf, audiof, visualf = textf.to(device), audiof.to(device), visualf.to(device)
             
-
-            nll, ratio, take_samp, uni_nll, comm_loss_value = model.get_loss(data)
+            # Generate all data versions (include original, 3 masked, 2 augmented)
+            data_versions = generate_all_data_versions(model, data, smurf_model) if args.use_comm else [data]
+            # print(f"Generated {len(data_versions)} data versions.")
+            # separate
+            ori_data = data_versions[0]
+            masked_data_versions = data_versions[1:1+len(modalities)]
+            augmented_data_versions = data_versions[1+len(modalities):]
+            # inspect and compare masked data and augmented data
+            print(len(masked_data_versions))
+            print(len(augmented_data_versions))
+            ## Get output with each data version
+            # masked outputs
+            rep_masked = []
+            for masked_data in masked_data_versions:
+                _, _, rep_m = model.net(masked_data)
+                # print("Masked representation inspect",rep_m)
+                # print(rep_m.shape)
+                rep_masked.append(rep_m) 
+            # augmented outputs
+            rep_augmented = []
+            for augmented_data in augmented_data_versions:
+                _, _, rep_a = model.net(augmented_data)
+                # print("augmented representation inspect",rep_a)
+                # print(rep_a.shape)
+                rep_augmented.append(rep_a)
             
+            # Compute comm loss
+            if args.use_comm:
+                comm_loss = 0
+                prototype = -1
+                for rep_m in rep_masked:
+                    for rep_a in rep_augmented:
+                        comm_loss_value = info_nce_loss(rep_m, rep_a, temperature=0.7)
+                        comm_loss += comm_loss_value
+                comm_loss = comm_loss / 2
+                comm_loss_aug = info_nce_loss(rep_augmented[0], rep_augmented[1], temperature=0.7)
+                comm_loss += comm_loss_aug
+                print(f"CoMM loss: {comm_loss.item()}")
+            nll, ratio, take_samp, uni_nll = model.get_loss(ori_data)
             total_take_sample += take_samp
             total_sample += len(labels)
-            
-            
-            loss = nll
-            if not isinstance(comm_loss_value, int):
-                loss = loss + comm_loss_value["loss"]
-
+            loss = nll + (0.1 * comm_loss if args.use_comm else 0)
+            # print(f"negative log likelihood: {nll.item()},comm loss: {comm_loss.item() if args.use_comm else 0}, total loss: {loss.item()}")
             _loss += loss.item()
             for m in modalities:
                 loss_m[m] += uni_nll[m].item()
@@ -545,9 +601,9 @@ def get_argurment():
             "v": 342,
         },
         "iemocap_coid": { # all dim 768
-            "a": 1024,
-            "t": 1024,
-            "v": 1024,
+            "a": 768,
+            "t": 768,
+            "v": 768,
         },
     }
 
