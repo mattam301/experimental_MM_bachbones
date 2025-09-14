@@ -127,14 +127,16 @@ class MM_DFN(nn.Module):
             rep[m] = features[all_length*j:all_length * (j+1)]
         
         rep = self.gated_attention(list(rep.values()), self.modalities)
-        
+        # print("Feature shape: ", rep[0].shape)
+        stacked_sum_rep = torch.stack([rep[m] for m in range(len(self.modalities))], dim=0).sum(dim=0)
+        # print("Stacked rep shape: ", stacked_sum_rep.shape)
         logit = {}
         for j, m in enumerate(self.modalities):
             logit[m] = self.uni_fc[m](rep[j])
         
         joint = torch.stack([logit[m] for m in self.modalities], dim=0).sum(dim=0)
-
-        return joint, logit
+        # print("joint shape: ", joint.shape)
+        return joint, logit, stacked_sum_rep
     
     def create_big_adj(self, features, dia_len, modals): 
         modal_num = len(modals)

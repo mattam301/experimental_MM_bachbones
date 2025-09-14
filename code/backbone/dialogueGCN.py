@@ -207,8 +207,7 @@ class DialogueGCN(nn.Module):
     def forward(self, x, length, speaker):
         graph_out, features = self.get_rep(x, length, speaker)
         out = self.clf(torch.cat([features, graph_out], dim=-1))
-
-        return out
+        return out, features
 
     def get_loss(self, data):
         graph_out, features = self.get_rep(data)
@@ -249,9 +248,13 @@ class MultiDialogueGCN(nn.Module):
         length = data["length"]
         speaker = data["speaker_tensor"]
         logit = {}
+        final_feat = {}
         for m in self.modalities:
-            logit[m] = self.uni_fc[m](x[m], length, speaker)
-
+            logit[m], final_feat[m] = self.uni_fc[m](x[m], length, speaker)
+        stacked_sum_feat = torch.stack([final_feat[m]
+                            for m in self.modalities], dim=0).sum(dim=0)
+        print(stacked_sum_feat.shape)
         joint = torch.stack([logit[m]
                             for m in self.modalities], dim=0).sum(dim=0)
-        return joint, logit
+        print(joint.shape)
+        return joint, logit, stacked_sum_feat

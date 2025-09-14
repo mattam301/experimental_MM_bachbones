@@ -6,7 +6,6 @@ from typing import List
 from comm_loss import CoMMLoss 
 from backbone import LateFusion, MMGCN, MultiDialogueGCN, MM_DFN, MultiBiModel
 from mmfusion import MMFusion
-from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
 class Model(nn.Module):
     def __init__(self, args):
@@ -29,7 +28,6 @@ class Model(nn.Module):
         self.growing_factor = args.cl_growth
         
         self.use_comm = args.use_comm
-        self.use_smurf = args.use_smurf
         # CoMM
         n_modalities = 3
         input_dims = [1024, 1024, 1024]
@@ -53,26 +51,10 @@ class Model(nn.Module):
             hidden_dim=1024, 
             n_classes=6, 
             augmentation_style="linear", 
-        )
-        hidden_dim = 1024
-        # SMURF
-        #hardcoded
-        D_text, D_audio, D_visual = 768, 512, 1024 #TODO change to args.embedding_dim
-        self.textf_input = nn.Conv1d(D_text, hidden_dim, kernel_size=1, padding=0, bias=False)
-        self.acouf_input = nn.Conv1d(D_audio, hidden_dim, kernel_size=1, padding=0, bias=False)
-        self.visuf_input = nn.Conv1d(D_visual, hidden_dim, kernel_size=1, padding=0, bias=False)
-        self.smurf_model = ThreeModalityModel(t_dim=D_text, a_dim=D_audio, v_dim=D_visual, out_dim=hidden_dim, final_dim=6)
-        
-        # Fusion layer 
-        self.fusion_layer = nn.Sequential(
-            nn.Linear(12, 64),
-            nn.ReLU(),
-            nn.Linear(64, 6)
-        )
-
+        )   
     def forward(self, data):
         # legacy pipeline
-        joint, logit = self.net(data)
+        joint, logit, feat = self.net(data)
         prob = F.log_softmax(joint, dim=-1)
         prob_m = {
             m: F.log_softmax(logit[m], dim=-1) for m in self.modalities
@@ -100,6 +82,8 @@ class Model(nn.Module):
             audiof = data["tensor"]['a']
             visualf = data["tensor"]['v']
             z1, z2, all_transformer_out = self.comm_module(textf, audiof, visualf, None)
+            print("z1 shape: ", z1[0].shape)
+            print("z2 shape: ", z2[3].shape)
             comm_loss = CoMMLoss()
             comm_loss_values = comm_loss({
                     "aug1_embed": z1,
@@ -109,12 +93,11 @@ class Model(nn.Module):
         else:
             comm_loss_values = 0
         # Legacy loss
-        joint, logit  = self.net(data)
+        data_versions = self.generate_all_data_versions(data)
+        print(f"Generated {len(data_versions)} data versions for CoMM.")
+        joint, logit, feat = self.net(data)
 
-        # if not self.use_smurf:
         prob = F.log_softmax(joint, dim=-1)
-        # else:
-        #     prob = self.forward(data)[3]
         prob_m = {
             m: F.log_softmax(logit[m], dim=-1) for m in self.modalities
         }
@@ -172,3 +155,32 @@ class Model(nn.Module):
         self.threshold *= self.growing_factor
         if self.threshold > 60:
             self.threshold = 60
+    def generate_all_data_versions(self, data):
+        data_versions = []
+        # Original data
+        data_versions.append(data)
+        # # Augmented data
+        # augmented_data = {}
+        # for m in self.modalities:
+        #     augmented_data[m] = self.augment_modality(data["tensor"][m])
+        # data_versions.append({
+        #     "tensor": augmented_data,
+        #     "length": data["length"],
+        #     "label_tensor": data["label_tensor"],
+        #     "speaker_tensor": data["speaker_tensor"]
+        # })
+        # Masked data (one modality left unmasked at a time)
+        for i, m in enumerate(self.modalities):
+            masked_data = {}
+            for j, m2 in enumerate(self.modalities):
+                if i == j:
+                    masked_data[m2] = data["tensor"][m2]
+                else:
+                    masked_data[m2] = torch.zeros_like(data["tensor"][m2])
+            data_versions.append({
+                "tensor": masked_data,
+                "length": data["length"],
+                "label_tensor": data["label_tensor"],
+                "speaker_tensor": data["speaker_tensor"]
+            })
+        return data_versions

@@ -75,22 +75,28 @@ class MMGCN(nn.Module):
         adj = self.create_big_adj(rep_list, lengths.tolist(), self.modalities)
 
         features = torch.cat(rep_list, dim=0)
-
+        print("Feature shape Before: ",features.shape)
         features, layer_inners = self.graph_net(features, None, spk_idx, adj)
+        print("Feature shape After: ",features.shape)
+
 
         all_length = rep_list[0].shape[0]
+        print("All lengths: ", all_length)
 
         rep = {}
         for j, m in enumerate(self.modalities):
             rep[m] = features[all_length*j:all_length * (j+1)]
+        stacked_sum_rep = torch.stack([rep[m] for m in self.modalities], dim=0).sum(dim=0)
+        # print("Stacked rep shape: ", stacked_sum_rep.shape)
         
         logit = {}
         for m in self.modalities:
             logit[m] = self.uni_fc[m](rep[m])
+        # print("text logit",logit["t"].shape)
         
         joint = torch.stack([logit[m] for m in self.modalities], dim=0).sum(dim=0)
-
-        return joint, logit
+        # print("Joint's shape: ", joint.shape)
+        return joint, logit, stacked_sum_rep
     
     def create_big_adj(self, features, dia_len, modals): 
         modal_num = len(modals)

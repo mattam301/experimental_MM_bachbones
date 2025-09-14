@@ -155,7 +155,7 @@ class CoMM(nn.Module):
         all_masks = self.gen_all_possible_masks(len(x))
 
         # Encode with CoMM encoder
-        z1 = [self.head(z) for z in self.comm_enc(x1, mask_modalities=all_masks)]
+        z1 = [self.head(z) for z in self.comm_enc(x1, mask_modalities=all_masks)] # => z1 is a list of 4 cases: [text only, audio only, visual only, all modalities]
         z2 = [self.head(z) for z in self.comm_enc(x2, mask_modalities=all_masks)]
 
         # If early_comm: add comm_true_out fusion

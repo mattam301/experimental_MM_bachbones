@@ -41,7 +41,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
         optim = Optimizer(args.learning_rate, args.weight_decay)
         optim.set_parameters(smurf_model.parameters(), args.optimizer)
         smurf_model.to(device)
-        for epoch in range(50):
+        for epoch in range(8):
             for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}")):
                 smurf_model.zero_grad()
                 data = train_set[idx]
@@ -151,9 +151,9 @@ def train(model: nn.Module,
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 ## Zone for CoMM augmentation on shared mutation
                 # add Gaussian noise to the shared component
-                m1 = (m1[0], m1[1] + torch.randn_like(m1[1]) * 0.1, m1[2])
-                m2 = (m2[0], m2[1] + torch.randn_like(m2[1]) * 0.1, m2[2])
-                # m3[1] = m3[1] + torch.randn_like(m3[1]) * 0.1
+                # m1 = (m1[0], m1[1] + torch.randn_like(m1[1]) * 0.1, m1[2])
+                # m2 = (m2[0], m2[1] + torch.randn_like(m2[1]) * 0.1, m2[2])
+                
                 ## end zone
                 textf = m1[0] + m1[1] + m1[2]
                 audiof = m2[0] + m2[1] + m2[2]
@@ -617,9 +617,9 @@ def main(args):
         model, train_set, dev_set, test_set, optim, logger, args)
 
     checkpoint_path = os.path.join("checkpoint", f"{args.dataset}_best_f1.pt")
-    if not os.path.exists(checkpoint_path):
-        os.makedirs(os.path.dirname(checkpoint_path))
-    torch.save({"args": args, "state_dict": state}, checkpoint_path)
+    # if not os.path.exists(checkpoint_path):
+    #     os.makedirs(os.path.dirname(checkpoint_path))
+    # torch.save({"args": args, "state_dict": state}, checkpoint_path)
 
 
 if __name__ == "__main__":
