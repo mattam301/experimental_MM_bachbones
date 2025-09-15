@@ -96,6 +96,9 @@ def compute_corr_loss(m1, m2, m3):
         cor_terms.append((-1.0) * cov_ab + 0.5 * var_a * var_b)
 
     L_cor = sum(cor_terms) / len(cor_terms)
+    
+    # ============Synergy loss ==========
+    # Not implemented yet
 
     # final correlation loss
     corr_loss = L_unco + L_cor

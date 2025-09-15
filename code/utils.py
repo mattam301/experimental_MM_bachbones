@@ -177,18 +177,40 @@ def compare_tensor_distributions(t1: torch.Tensor,
     # Save plot
     plt.savefig(f"{path}_distribution.png")
 
-def compare_tensor_kde(t1, t2, labels=("Tensor 1", "Tensor 2"), path="figures/abc"):
+def compare_tensor_kde(t1, t2, labels=("Tensor 1", "Tensor 2"), 
+                       path="figures/abc", value_range=None):
+    """
+    Plot KDE distributions of two tensors, optionally restricted to a value range.
+
+    Args:
+        t1, t2: torch.Tensor
+            Input tensors.
+        labels: tuple of str
+            Labels for each tensor.
+        path: str
+            Output file path prefix.
+        value_range: tuple (low, high) or None
+            If provided, only plot values within [low, high].
+    """
     arr1 = t1.detach().cpu().numpy().flatten()
     arr2 = t2.detach().cpu().numpy().flatten()
 
+    # Apply range filtering if specified
+    if value_range is not None:
+        low, high = value_range
+        arr1 = arr1[(arr1 >= low) & (arr1 <= high)]
+        arr2 = arr2[(arr2 >= low) & (arr2 <= high)]
+
     plt.figure(figsize=(8,5))
-    sns.kdeplot(arr1, label=labels[0], fill=True, alpha=0.4)
-    sns.kdeplot(arr2, label=labels[1], fill=True, alpha=0.4)
+    sns.kdeplot(arr1, label=labels[0], fill=True, alpha=0.4, clip=value_range)
+    sns.kdeplot(arr2, label=labels[1], fill=True, alpha=0.4, clip=value_range)
 
     plt.title("Tensor Value Distributions (KDE)")
     plt.xlabel("Value")
     plt.ylabel("Density")
     plt.legend()
+    if value_range is not None:
+        plt.xlim(value_range)
     plt.savefig(f"{path}_kde.png", dpi=300, bbox_inches="tight")
     plt.close()
 

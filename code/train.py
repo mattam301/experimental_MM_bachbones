@@ -56,9 +56,9 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 corr_loss, _, _ = compute_corr_loss(m1, m2, m3)
                 # Compare tensors m1[0] and m1[2]
                 if args.plot_smurf_decomp:
-                    compare_tensor_kde(m1[0], m1[2], labels=("unique", "shared1"), path=f"figures_kde/smurf_pretrained_epoch_{epoch}")
-                    compare_tensor_diff(m1[0], m1[2], path=f"figures_diff/smurf_pretrained_epoch_{epoch}")
-                    compare_tensor_scatter(m1[0], m1[2], path=f"figures_scatter/smurf_pretrained_epoch_{epoch}")
+                    compare_tensor_kde(m1[0], m1[1], labels=("unique", "shared1"), path=f"figures_kde/smurf_pretrained_epoch_{epoch}", value_range=(-0.02, 0.02))
+                    # compare_tensor_diff(m1[0], m1[2], path=f"figures_diff/smurf_pretrained_epoch_{epoch}")
+                    # compare_tensor_scatter(m1[0], m1[2], path=f"figures_scatter/smurf_pretrained_epoch_{epoch}")
                     cos_sim = torch.nn.functional.cosine_similarity(m1[0].flatten(), m1[1].flatten(), dim=0)
                     print("Cosine similarity:", cos_sim.item())
                 # Average prob between smurf and legacy
@@ -75,7 +75,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 # predict loss
                 criterion = nn.NLLLoss()
                 nll = criterion(prob_smurf, labels)
-                loss = nll + 0.1 * corr_loss
+                loss = nll + 10*corr_loss
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(
                     smurf_model.parameters(), max_norm=args.grad_norm_max, norm_type=args.grad_norm)
@@ -167,7 +167,10 @@ def train(model: nn.Module,
     optimizer.set_parameters(model.parameters(), args.optimizer)
 
     early_stopping_count = 0
-    smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=256, final_dim=256).to(device)
+    if args.dataset == "iemocap_coid":
+        smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=256, final_dim=256).to(device)
+    elif args.dataset == "meld":
+        smurf_model = ThreeModalityModel(t_dim=768, a_dim=300, v_dim=342, out_dim=256, final_dim=256).to(device)
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
     if args.use_smurf and args.use_comm:
         _, _, _, _, smurf_model = smurf_pretrain(smurf_model, train_set, args)
@@ -663,7 +666,7 @@ def main(args):
 
     if "iemocap" in args.dataset:
         data = load_iemocap()
-    if args.dataset == "meld":
+    if "meld" in args.dataset:
         data = load_meld()
 
     train_set = Dataloader(data["train"], args)
