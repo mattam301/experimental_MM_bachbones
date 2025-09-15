@@ -146,9 +146,9 @@ import matplotlib.pyplot as plt
 
 def compare_tensor_distributions(t1: torch.Tensor, 
                                  t2: torch.Tensor, 
-                                 t3: torch.Tensor, 
-                                 labels=("Tensor 1", "Tensor 2", "Tensor 3"), 
-                                 bins=50):
+                                 labels=("Tensor 1", "Tensor 2"), 
+                                 bins=200,
+                                 path="figures/abc"):
     """
     Compare the distributions of three tensors by plotting their histograms.
 
@@ -163,12 +163,10 @@ def compare_tensor_distributions(t1: torch.Tensor,
     # Convert to numpy
     arr1 = t1.detach().cpu().numpy().flatten()
     arr2 = t2.detach().cpu().numpy().flatten()
-    arr3 = t3.detach().cpu().numpy().flatten()
 
     plt.figure(figsize=(8, 5))
     plt.hist(arr1, bins=bins, alpha=0.5, label=labels[0], density=True)
     plt.hist(arr2, bins=bins, alpha=0.5, label=labels[1], density=True)
-    plt.hist(arr3, bins=bins, alpha=0.5, label=labels[2], density=True)
 
     plt.title("Comparison of Tensor Distributions")
     plt.xlabel("Value")
@@ -176,3 +174,5 @@ def compare_tensor_distributions(t1: torch.Tensor,
     plt.legend()
     plt.grid(True, linestyle="--", alpha=0.6)
     plt.show()
+    # Save plot
+    plt.savefig(f"{path}_distribution.png")

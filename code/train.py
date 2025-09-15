@@ -55,9 +55,8 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 corr_loss, _, _ = compute_corr_loss(m1, m2, m3)
                 
-                # comparison among 3 components of m1 (m1[0], m1[1] and m1[2]), save distributional comparison to a figure (/figures/)
-                if epoch+1 % 20 == 0 and idx == 0:
-                    compare_tensor_distributions(m1[0], m1[1], m1[2], f"figures/smurf_pretrain_epoch{epoch+1}_text.png", modality="text")
+                if epoch % 10 == 0 and idx == 0 and args.plot_smurf_decomp:
+                    compare_tensor_distributions(m1[0], m1[1], m1[2], labels=("unique", "shared1"), bins=200, path=f"figures/smurf_pretrained_epoch_{epoch}")
                 
                 # Average prob between smurf and legacy
                 final_logits = final_repr
@@ -579,6 +578,9 @@ def get_argurment():
     )
     parser.add_argument(
         "--use_smurf", action="store_true", default=False,
+    )
+    parser.add_argument(
+        "--plot_smurf_decomp", action="store_true", default=False,
     )
 
     args, unknown = parser.parse_known_args()
