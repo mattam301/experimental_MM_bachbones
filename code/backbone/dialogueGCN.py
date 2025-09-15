@@ -253,8 +253,8 @@ class MultiDialogueGCN(nn.Module):
             logit[m], final_feat[m] = self.uni_fc[m](x[m], length, speaker)
         stacked_sum_feat = torch.stack([final_feat[m]
                             for m in self.modalities], dim=0).sum(dim=0)
-        print(stacked_sum_feat.shape)
+        # print(stacked_sum_feat.shape)
         joint = torch.stack([logit[m]
                             for m in self.modalities], dim=0).sum(dim=0)
-        print(joint.shape)
+        # print(joint.shape)
         return joint, logit, stacked_sum_feat
