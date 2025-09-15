@@ -176,3 +176,40 @@ def compare_tensor_distributions(t1: torch.Tensor,
     plt.show()
     # Save plot
     plt.savefig(f"{path}_distribution.png")
+
+def compare_tensor_kde(t1, t2, labels=("Tensor 1", "Tensor 2"), path="figures/abc"):
+    arr1 = t1.detach().cpu().numpy().flatten()
+    arr2 = t2.detach().cpu().numpy().flatten()
+
+    plt.figure(figsize=(8,5))
+    sns.kdeplot(arr1, label=labels[0], fill=True, alpha=0.4)
+    sns.kdeplot(arr2, label=labels[1], fill=True, alpha=0.4)
+
+    plt.title("Tensor Value Distributions (KDE)")
+    plt.xlabel("Value")
+    plt.ylabel("Density")
+    plt.legend()
+    plt.savefig(f"{path}_kde.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+def compare_tensor_scatter(t1, t2, path="figures/abc"):
+    arr1 = t1.detach().cpu().numpy().flatten()
+    arr2 = t2.detach().cpu().numpy().flatten()
+
+    plt.figure(figsize=(6,6))
+    plt.scatter(arr1, arr2, alpha=0.3, s=5)
+    plt.xlabel("Tensor 1 values")
+    plt.ylabel("Tensor 2 values")
+    plt.title("Tensor Value Correlation")
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.savefig(f"{path}_scatter.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+def compare_tensor_diff(t1, t2, path="figures/abc"):
+    diff = (t1 - t2).detach().cpu().numpy()
+    plt.figure(figsize=(8,5))
+    plt.imshow(diff, aspect="auto", cmap="coolwarm")
+    plt.colorbar(label="Difference")
+    plt.title("Elementwise Difference Heatmap")
+    plt.savefig(f"{path}_diff.png", dpi=300, bbox_inches="tight")
+    plt.close()

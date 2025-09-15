@@ -18,7 +18,7 @@ from sklearn import metrics
 from model import Model
 from dataloader import load_iemocap, load_meld, Dataloader
 from optimizer import Optimizer
-from utils import set_seed, weight_visualize, info_nce_loss, compare_tensor_distributions
+from utils import set_seed, weight_visualize, info_nce_loss, compare_tensor_kde, compare_tensor_diff, compare_tensor_scatter
 import json
 from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
@@ -54,10 +54,13 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 #
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 corr_loss, _, _ = compute_corr_loss(m1, m2, m3)
-                
-                if epoch % 10 == 0 and idx == 0 and args.plot_smurf_decomp:
-                    compare_tensor_distributions(m1[0], m1[1], m1[2], labels=("unique", "shared1"), bins=200, path=f"figures/smurf_pretrained_epoch_{epoch}")
-                
+                # Compare tensors m1[0] and m1[2]
+                if args.plot_smurf_decomp:
+                    compare_tensor_kde(m1[0], m1[2], labels=("unique", "shared1"), path=f"figures_kde/smurf_pretrained_epoch_{epoch}")
+                    compare_tensor_diff(m1[0], m1[2], path=f"figures_diff/smurf_pretrained_epoch_{epoch}")
+                    compare_tensor_scatter(m1[0], m1[2], path=f"figures_scatter/smurf_pretrained_epoch_{epoch}")
+                    cos_sim = torch.nn.functional.cosine_similarity(m1[0].flatten(), m1[1].flatten(), dim=0)
+                    print("Cosine similarity:", cos_sim.item())
                 # Average prob between smurf and legacy
                 final_logits = final_repr
     
