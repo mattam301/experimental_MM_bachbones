@@ -169,7 +169,7 @@ def train(model: nn.Module,
     early_stopping_count = 0
     if args.dataset == "iemocap_coid":
         smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=256, final_dim=256).to(device)
-    elif args.dataset == "meld":
+    elif args.dataset == "meld_coid":
         smurf_model = ThreeModalityModel(t_dim=768, a_dim=300, v_dim=342, out_dim=256, final_dim=256).to(device)
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
     if args.use_smurf and args.use_comm:
