@@ -394,7 +394,7 @@ def get_argurment():
     parser.add_argument(
         "--dataset",
         type=str,
-        choices=["iemocap", "meld", "iemocap_coid"],
+        choices=["iemocap", "meld", "iemocap_coid", "meld_coid"],
         default="iemocap",
     )
 
@@ -599,13 +599,20 @@ def get_argurment():
             "t": 768,
             "v": 768,
         },
+        "meld_coid": { # all dim 768
+            "a": 768,
+            "t": 768,
+            "v": 768,
+        },
     }
 
     args.dataset_label_dict = {
         "iemocap": {"hap": 0, "sad": 1, "neu": 2, "ang": 3, "exc": 4, "fru": 5},
         "iemocap_coid": {"hap": 0, "sad": 1, "neu": 2, "ang": 3, "exc": 4, "fru": 5},
         "iemocap_4": {"hap": 0, "sad": 1, "neu": 2, "ang": 3},
+        "iemocap_4_coid": {"hap": 0, "sad": 1, "neu": 2, "ang": 3},
         "meld": {"neu": 0, "sup": 1, "fea": 2, "sad": 3, "joy": 4, "dis": 5, "ang": 6},
+        "meld_coid": {"neu": 0, "sup": 1, "fea": 2, "sad": 3, "joy": 4, "dis": 5, "ang": 6},
         "mosei7": {
             "Strong Negative": 0,
             "Weak Negative": 1,
@@ -623,9 +630,11 @@ def get_argurment():
         "iemocap": 2,
         "iemocap_coid": 2,
         "iemocap_4": 2,
+        "iemocap_4_coid": 2,
         "mosei7": 1,
         "mosei2": 1,
         "meld": 8,
+        "meld_coid": 8,
     }
 
     if args.seed == "time":
@@ -642,7 +651,7 @@ def get_argurment():
 def main(args):
     set_seed(args.seed)
 
-    if args.dataset == "iemocap" or args.dataset == "iemocap_coid":
+    if "iemocap" in args.dataset:
         data = load_iemocap()
     if args.dataset == "meld":
         data = load_meld()
@@ -666,7 +675,7 @@ def main(args):
     dev_f1, test_f1, state = train(
         model, train_set, dev_set, test_set, optim, logger, args)
 
-    checkpoint_path = os.path.join("checkpoint", f"{args.dataset}_best_f1.pt")
+    # checkpoint_path = os.path.join("checkpoint", f"{args.dataset}_best_f1.pt")
     # if not os.path.exists(checkpoint_path):
     #     os.makedirs(os.path.dirname(checkpoint_path))
     # torch.save({"args": args, "state_dict": state}, checkpoint_path)
