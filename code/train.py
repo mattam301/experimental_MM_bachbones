@@ -18,7 +18,7 @@ from sklearn import metrics
 from model import Model
 from dataloader import load_iemocap, load_meld, Dataloader
 from optimizer import Optimizer
-from utils import set_seed, weight_visualize, info_nce_loss
+from utils import set_seed, weight_visualize, info_nce_loss, compare_tensor_distributions
 import json
 from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
@@ -54,6 +54,11 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 #
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 corr_loss, _, _ = compute_corr_loss(m1, m2, m3)
+                
+                # comparison among 3 components of m1 (m1[0], m1[1] and m1[2]), save distributional comparison to a figure (/figures/)
+                if epoch+1 % 20 == 0 and idx == 0:
+                    compare_tensor_distributions(m1[0], m1[1], m1[2], f"figures/smurf_pretrain_epoch{epoch+1}_text.png", modality="text")
+                
                 # Average prob between smurf and legacy
                 final_logits = final_repr
     

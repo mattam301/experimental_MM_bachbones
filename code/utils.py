@@ -140,3 +140,39 @@ def info_nce_loss(rep_m: torch.Tensor, rep_a: torch.Tensor, temperature: float =
     # Symmetrized loss
     loss = (loss_m2a + loss_a2m) / 2
     return loss
+
+import torch
+import matplotlib.pyplot as plt
+
+def compare_tensor_distributions(t1: torch.Tensor, 
+                                 t2: torch.Tensor, 
+                                 t3: torch.Tensor, 
+                                 labels=("Tensor 1", "Tensor 2", "Tensor 3"), 
+                                 bins=50):
+    """
+    Compare the distributions of three tensors by plotting their histograms.
+
+    Args:
+        t1, t2, t3: torch.Tensor
+            Input tensors.
+        labels: tuple of str
+            Labels for each tensor.
+        bins: int
+            Number of bins for the histogram.
+    """
+    # Convert to numpy
+    arr1 = t1.detach().cpu().numpy().flatten()
+    arr2 = t2.detach().cpu().numpy().flatten()
+    arr3 = t3.detach().cpu().numpy().flatten()
+
+    plt.figure(figsize=(8, 5))
+    plt.hist(arr1, bins=bins, alpha=0.5, label=labels[0], density=True)
+    plt.hist(arr2, bins=bins, alpha=0.5, label=labels[1], density=True)
+    plt.hist(arr3, bins=bins, alpha=0.5, label=labels[2], density=True)
+
+    plt.title("Comparison of Tensor Distributions")
+    plt.xlabel("Value")
+    plt.ylabel("Density")
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.show()
