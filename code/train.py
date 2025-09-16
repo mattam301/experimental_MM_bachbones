@@ -75,7 +75,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 # predict loss
                 criterion = nn.NLLLoss()
                 nll = criterion(prob_smurf, labels)
-                loss = nll + 10*corr_loss
+                loss = nll + 5*corr_loss
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(
                     smurf_model.parameters(), max_norm=args.grad_norm_max, norm_type=args.grad_norm)
@@ -130,9 +130,9 @@ def generate_all_data_versions(self, data, smurf_model):
         data_versions.append(augmented_data)
 
         augmented_data = copy.deepcopy(data)
-        augment2_1 = m1[1] + torch.randn_like(m1[1]) * 0.2
-        augment2_2 = m2[1] + torch.randn_like(m2[1]) * 0.2
-        augment2_3 = m3[1] + torch.randn_like(m3[1]) * 0.2
+        augment2_1 = m1[1] + torch.randn_like(m1[1]) * 0.1
+        augment2_2 = m2[1] + torch.randn_like(m2[1]) * 0.1
+        augment2_3 = m3[1] + torch.randn_like(m3[1]) * 0.1
         augmented_data["tensor"] = {
             "t": torch.cat([m1[0], augment2_1, m1[2]], dim=-1),
             "a": torch.cat([m2[0], augment2_2, m2[2]], dim=-1),
@@ -171,6 +171,8 @@ def train(model: nn.Module,
         smurf_model = ThreeModalityModel(t_dim=768, a_dim=512, v_dim=1024, out_dim=256, final_dim=256).to(device)
     elif args.dataset == "meld_coid":
         smurf_model = ThreeModalityModel(t_dim=768, a_dim=300, v_dim=342, out_dim=256, final_dim=256).to(device)
+    else:
+        smurf_model = None
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
     if args.use_smurf and args.use_comm:
         _, _, _, _, smurf_model = smurf_pretrain(smurf_model, train_set, args)
