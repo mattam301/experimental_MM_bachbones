@@ -11,7 +11,6 @@ def batch_graphify(features, lengths, speaker_tensor, wp, wf, edge_type_to_idx, 
     length_sum = 0
     edge_ind = []
     edge_index_lengths = []
-
     for j in range(batch_size):
         edge_ind.append(edge_perms(lengths[j].cpu().item(), wp, wf))
 

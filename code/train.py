@@ -18,7 +18,7 @@ from sklearn import metrics
 from model import Model
 from dataloader import load_iemocap, load_meld, Dataloader
 from optimizer import Optimizer
-from utils import set_seed, weight_visualize, info_nce_loss, compare_tensor_kde, compare_tensor_diff, compare_tensor_scatter
+from utils import set_seed, weight_visualize, info_nce_loss, compare_tensor_kde, compare_tensor_diff, compare_tensor_scatter, forward_masked_augmented
 import json
 from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
@@ -30,7 +30,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
         optim = Optimizer(args.learning_rate, args.weight_decay)
         optim.set_parameters(smurf_model.parameters(), args.optimizer)
         smurf_model.to(device)
-        for epoch in range(60):
+        for epoch in range(2):
             for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}")):
                 smurf_model.zero_grad()
                 data = train_set[idx]
@@ -210,20 +210,26 @@ def train(model: nn.Module,
             ori_data = data_versions[0]
             masked_data_versions = data_versions[1:1+len(modalities)]
             augmented_data_versions = data_versions[1+len(modalities):]
-            # masked outputs
-            rep_masked = []
-            for masked_data in masked_data_versions:
-                _, _, rep_m = model.net(masked_data)
-                # print("Masked representation inspect",rep_m)
-                # print(rep_m.shape)
-                rep_masked.append(rep_m) 
-            # augmented outputs
-            rep_augmented = []
-            for augmented_data in augmented_data_versions:
-                _, _, rep_a = model.net(augmented_data)
-                # print("augmented representation inspect",rep_a)
-                # print(rep_a.shape)
-                rep_augmented.append(rep_a)
+            
+            ###################### DEV: stack all versions for speed up
+            # -------- STACKING STEP --------
+            print("start dummy forward")
+            rep_masked, rep_augmented = forward_masked_augmented(model, data_versions)
+            print("Done forwarding")
+            # # masked outputs
+            # rep_masked = []
+            # for masked_data in masked_data_versions:
+            #     _, _, rep_m = model.net(masked_data)
+            #     # print("Masked representation inspect",rep_m)
+            #     # print(rep_m.shape)
+            #     rep_masked.append(rep_m) 
+            # # augmented outputs
+            # rep_augmented = []
+            # for augmented_data in augmented_data_versions:
+            #     _, _, rep_a = model.net(augmented_data)
+            #     # print("augmented representation inspect",rep_a)
+            #     # print(rep_a.shape)
+            #     rep_augmented.append(rep_a)
             
             # Compute comm loss
             if args.use_comm:
@@ -236,7 +242,6 @@ def train(model: nn.Module,
                 comm_loss = comm_loss / 2
                 comm_loss_aug = info_nce_loss(rep_augmented[0], rep_augmented[1], temperature=0.7)
                 comm_loss += comm_loss_aug
-                # print(f"CoMM loss: {comm_loss.item()}")
             nll, ratio, take_samp, uni_nll = model.get_loss(ori_data)
             total_take_sample += take_samp
             total_sample += len(labels)

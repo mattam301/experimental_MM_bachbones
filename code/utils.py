@@ -6,6 +6,8 @@ import torch.autograd as autograd
 import seaborn as sns
 import torch.distributed as dist
 import torch.nn.functional as F
+import copy
+import torch
 
 
 
@@ -235,3 +237,27 @@ def compare_tensor_diff(t1, t2, path="figures/abc"):
     plt.title("Elementwise Difference Heatmap")
     plt.savefig(f"{path}_diff.png", dpi=300, bbox_inches="tight")
     plt.close()
+
+def forward_masked_augmented(model, data_versions, device="cuda"):
+    num_versions = len(data_versions)
+    num_masked = num_versions - 3   # exclude ori + 2 augmented
+    num_augmented = 2
+
+    models = [copy.deepcopy(model).to(device).eval()
+              for _ in range(num_versions - 1)]
+
+    rep_masked, rep_augmented = [], []
+    with torch.no_grad():
+        # masked reps
+        for m, data in zip(models[:num_masked], data_versions[1:1+num_masked]):
+            _, _, rep = m.net(data)   # << unpack here
+            rep_masked.append(rep)
+
+        # augmented reps
+        for m, data in zip(models[num_masked:], data_versions[-num_augmented:]):
+            _, _, rep = m.net(data)   # << unpack here
+            rep_augmented.append(rep)
+
+    del models
+    torch.cuda.empty_cache()
+    return rep_masked, rep_augmented
