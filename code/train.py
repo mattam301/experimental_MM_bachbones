@@ -213,26 +213,26 @@ def train(model: nn.Module,
             
             ###################### DEV: stack all versions for speed up
             # -------- STACKING STEP --------
-            print("start dummy forward")
-            rep_masked, rep_augmented = forward_masked_augmented(model, data_versions)
-            print("Done forwarding")
-            # # masked outputs
-            # rep_masked = []
-            # for masked_data in masked_data_versions:
-            #     _, _, rep_m = model.net(masked_data)
-            #     # print("Masked representation inspect",rep_m)
-            #     # print(rep_m.shape)
-            #     rep_masked.append(rep_m) 
-            # # augmented outputs
-            # rep_augmented = []
-            # for augmented_data in augmented_data_versions:
-            #     _, _, rep_a = model.net(augmented_data)
-            #     # print("augmented representation inspect",rep_a)
-            #     # print(rep_a.shape)
-            #     rep_augmented.append(rep_a)
+            if args.use_comm:
+                if args.use_hightway:
+                    rep_masked, rep_augmented = forward_masked_augmented(model, data_versions)
+                else:
+                    # masked outputs
+                    rep_masked = []
+                    for masked_data in masked_data_versions:
+                        _, _, rep_m = model.net(masked_data)
+                        # print("Masked representation inspect",rep_m)
+                        # print(rep_m.shape)
+                        rep_masked.append(rep_m) 
+                    # augmented outputs
+                    rep_augmented = []
+                    for augmented_data in augmented_data_versions:
+                        _, _, rep_a = model.net(augmented_data)
+                        # print("augmented representation inspect",rep_a)
+                        # print(rep_a.shape)
+                        rep_augmented.append(rep_a)
             
             # Compute comm loss
-            if args.use_comm:
                 comm_loss = 0
                 prototype = -1
                 for rep_m in rep_masked:
@@ -594,6 +594,9 @@ def get_argurment():
     )
     parser.add_argument(
         "--plot_smurf_decomp", action="store_true", default=False,
+    )
+    parser.add_argument(
+        "--use_hightway", action="store_true", default=False,
     )
 
     args, unknown = parser.parse_known_args()

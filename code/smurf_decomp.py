@@ -59,7 +59,7 @@ def compute_corr_loss(m1, m2, m3):
     m1, m2, m3: each is a tuple of (hat, hat_1, hat_2)
        - hat   : independent head
        - hat_1 : shared with the *next* modality
-       - hat_2 : shared with the *other* modality
+       - hat_2 : synergy with the *other* modality
     Each element is a [batch, dim] tensor.
     """
 
@@ -70,9 +70,9 @@ def compute_corr_loss(m1, m2, m3):
 
     # ========== Uncorrelation loss ==========
     unco_pairs = [
-        (m1_hat, m1_hat1), (m1_hat, m1_hat2),
-        (m2_hat, m2_hat1), (m2_hat, m2_hat2),
-        (m3_hat, m3_hat1), (m3_hat, m3_hat2)
+        (m1_hat, m1_hat1), 
+        (m2_hat, m2_hat1), 
+        (m3_hat, m3_hat1),
     ]
 
     L_unco = sum(
@@ -82,9 +82,16 @@ def compute_corr_loss(m1, m2, m3):
 
     # ========== Cross-modal correlation loss ==========
     cross_pairs = [
-        (m1_hat1, m2_hat1),
-        (m1_hat2, m3_hat1),
-        (m2_hat2, m3_hat2)
+        (m1_hat1, m2_hat1), #r1,r2
+        (m2_hat1, m3_hat1), #r2,r3
+        (m3_hat1, m1_hat1), #r3,r1
+        (m1_hat2, m2_hat2), #s1,s2
+        (m2_hat2, m3_hat2), #s2,s3
+        (m3_hat2, m1_hat2), #s3,s1
+        (m1_hat, m1_hat2), #u1, s1
+        (m2_hat, m2_hat2), #u1, s1
+        (m3_hat, m3_hat2), #u1, s1
+        
     ]
 
     cor_terms = []

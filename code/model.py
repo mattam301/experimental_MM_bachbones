@@ -53,8 +53,6 @@ class Model(nn.Module):
     def get_loss(self, data):
         # Legacy loss
         joint, logit, feat = self.net(data)
-        
-        comm_loss = CoMMLoss()
         prob = F.log_softmax(joint, dim=-1)
         prob_m = {
             m: F.log_softmax(logit[m], dim=-1) for m in self.modalities
