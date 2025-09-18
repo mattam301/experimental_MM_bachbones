@@ -261,3 +261,63 @@ def forward_masked_augmented(model, data_versions, device="cuda"):
     del models
     torch.cuda.empty_cache()
     return rep_masked, rep_augmented
+
+
+####
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+
+# Create a folder for saving plots
+os.makedirs("viz_embeddings", exist_ok=True)
+
+def visualize_embeddings(m1, m2, m3, epoch, method="pca", n_samples=200):
+    """
+    m1, m2, m3: tuples of (hat, hat1, hat2), each [batch, dim]
+    method: "pca" or "tsne"
+    """
+
+    # Collect embeddings and labels
+    all_embeds = []
+    all_labels = []
+
+    for i, (hat, hat1, hat2) in enumerate([m1, m2, m3], start=1):
+        hat = hat.detach().cpu().numpy()
+        hat1 = hat1.detach().cpu().numpy()
+        hat2 = hat2.detach().cpu().numpy()
+
+        # sample to avoid clutter
+        idx = np.random.choice(hat.shape[0], min(n_samples, hat.shape[0]), replace=False)
+
+        all_embeds.append(hat[idx])
+        all_labels.extend([f"U{i}"] * len(idx))  # uniqueness
+        all_embeds.append(hat1[idx])
+        all_labels.extend([f"R{i}"] * len(idx))  # redundancy
+        all_embeds.append(hat2[idx])
+        all_labels.extend([f"S{i}"] * len(idx))  # synergy
+
+    all_embeds = np.concatenate(all_embeds, axis=0)
+
+    # Projection
+    if method == "pca":
+        reducer = PCA(n_components=2)
+    elif method == "tsne":
+        reducer = TSNE(n_components=2, init="pca", random_state=42, perplexity=30)
+    else:
+        raise ValueError("method must be 'pca' or 'tsne'")
+
+    proj = reducer.fit_transform(all_embeds)
+
+    # Plot
+    plt.figure(figsize=(7, 6))
+    for lbl in set(all_labels):
+        idx = [i for i, l in enumerate(all_labels) if l == lbl]
+        plt.scatter(proj[idx, 0], proj[idx, 1], label=lbl, alpha=0.6, s=15)
+
+    plt.title(f"Embedding projection ({method.upper()}) - Epoch {epoch}")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(f"viz_embeddings/embeddings_{method}_epoch{epoch}.png")
+    plt.close()

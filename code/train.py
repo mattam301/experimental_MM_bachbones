@@ -8,6 +8,9 @@ import time
 from datetime import datetime
 from comm_loss import CoMMLoss 
 
+# Create a folder for saving plots
+os.makedirs("viz_embeddings", exist_ok=True)
+
 
 import numpy as np
 import torch
@@ -18,7 +21,7 @@ from sklearn import metrics
 from model import Model
 from dataloader import load_iemocap, load_meld, Dataloader
 from optimizer import Optimizer
-from utils import set_seed, weight_visualize, info_nce_loss, compare_tensor_kde, compare_tensor_diff, compare_tensor_scatter, forward_masked_augmented
+from utils import set_seed, weight_visualize, info_nce_loss, visualize_embeddings, forward_masked_augmented
 import json
 from smurf_decomp import ThreeModalityModel, compute_corr_loss
 
@@ -55,13 +58,9 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 corr_loss, L_uncor, L_cor = compute_corr_loss(m1, m2, m3)
                 # Compare tensors m1[0] and m1[2]
-                if args.plot_smurf_decomp:
-                    compare_tensor_kde(m1[0], m1[1], labels=("unique", "shared1"), path=f"figures_kde/smurf_pretrained_epoch_{epoch}", value_range=(-0.02, 0.02))
-                    # compare_tensor_diff(m1[0], m1[2], path=f"figures_diff/smurf_pretrained_epoch_{epoch}")
-                    # compare_tensor_scatter(m1[0], m1[2], path=f"figures_scatter/smurf_pretrained_epoch_{epoch}")
-                    cos_sim = torch.nn.functional.cosine_similarity(m1[0].flatten(), m1[1].flatten(), dim=0)
-                    print("Cosine similarity:", cos_sim.item())
-                # Average prob between smurf and legacy
+                if epoch % 10 == 0 and idx == 0:  # visualize once per 10 epochs, first batch
+                    visualize_embeddings(m1, m2, m3, epoch, method="pca")
+                    visualize_embeddings(m1, m2, m3, epoch, method="tsne")
                 final_logits = final_repr
     
                 # mask out padding and flatten (hot fix)
