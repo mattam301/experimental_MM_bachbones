@@ -53,7 +53,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 visualf = (visualf.permute(1, 2, 0)).transpose(1, 2)
                 #
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
-                corr_loss, _, _ = compute_corr_loss(m1, m2, m3)
+                corr_loss, L_uncor, L_cor = compute_corr_loss(m1, m2, m3)
                 # Compare tensors m1[0] and m1[2]
                 if args.plot_smurf_decomp:
                     compare_tensor_kde(m1[0], m1[1], labels=("unique", "shared1"), path=f"figures_kde/smurf_pretrained_epoch_{epoch}", value_range=(-0.02, 0.02))
@@ -80,7 +80,7 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 torch.nn.utils.clip_grad_norm_(
                     smurf_model.parameters(), max_norm=args.grad_norm_max, norm_type=args.grad_norm)
                 optim.step()
-                pbar.set_description(f"Pretrained Epoch {epoch+1}, Pretrain loss {loss:,.4f}, Corr loss {corr_loss:,.4f}")
+                pbar.set_description(f"Pretrained Epoch {epoch+1}, Pretrain loss {loss:,.4f}, Corr loss {L_cor:,.4f}, Uncorr loss {L_uncor:,.4f}")
                 
     return m1, m2, m3, final_repr, smurf_model
 
