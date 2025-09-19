@@ -176,6 +176,9 @@ def train(model: nn.Module,
     if args.use_smurf and args.use_comm:
         _, _, _, _, smurf_model = smurf_pretrain(smurf_model, train_set, args)
         print("SMURF module pretrained.")
+        # Save pretrained SMURF
+        torch.save(smurf_model.state_dict(), "smurf_pretrained.pt")
+        print("✅ SMURF pretrained model saved to smurf_pretrained.pt")
     
     ## legacy training module/backbone
     for epoch in range(args.epochs):
