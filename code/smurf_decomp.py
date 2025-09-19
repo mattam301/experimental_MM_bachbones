@@ -70,9 +70,10 @@ def compute_corr_loss(m1, m2, m3):
 
     # ========== Uncorrelation loss ==========
     unco_pairs = [
-        (m1_hat, m1_hat1), 
-        (m2_hat, m2_hat1), 
-        (m3_hat, m3_hat1),
+        (m1_hat, m1_hat1), #u1,r1
+        (m2_hat, m2_hat1), #u2,r2
+        (m3_hat, m3_hat1), #u3,r3
+        
     ]
 
     L_unco = sum(
@@ -89,8 +90,8 @@ def compute_corr_loss(m1, m2, m3):
         (m2_hat2, m3_hat2), #s2,s3
         (m3_hat2, m1_hat2), #s3,s1
         (m1_hat, m1_hat2), #u1, s1
-        (m2_hat, m2_hat2), #u1, s1
-        (m3_hat, m3_hat2), #u1, s1
+        (m2_hat, m2_hat2), #u2, s2
+        (m3_hat, m3_hat2), #u3, s3
         
     ]
 

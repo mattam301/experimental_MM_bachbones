@@ -58,9 +58,9 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 corr_loss, L_uncor, L_cor = compute_corr_loss(m1, m2, m3)
                 # Compare tensors m1[0] and m1[2]
-                if epoch % 10 == 0 and idx == 0:  # visualize once per 10 epochs, first batch
-                    visualize_embeddings(m1, m2, m3, epoch, method="pca")
-                    visualize_embeddings(m1, m2, m3, epoch, method="tsne")
+                # if epoch % 10 == 0 and idx == 0:  # visualize once per 10 epochs, first batch
+                #     visualize_embeddings(m1, m2, m3, epoch, method="pca")
+                #     visualize_embeddings(m1, m2, m3, epoch, method="tsne")
                 final_logits = final_repr
     
                 # mask out padding and flatten (hot fix)

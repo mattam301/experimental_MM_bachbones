@@ -273,6 +273,15 @@ import os
 # Create a folder for saving plots
 os.makedirs("viz_embeddings", exist_ok=True)
 
+def to_2d(x):
+    """
+    Convert [batch, seq, dim] or [batch, dim] to [batch*seq, dim]
+    """
+    x = x.detach().cpu()
+    if x.ndim == 3:
+        x = x.reshape(-1, x.shape[-1])
+    return x.numpy()
+
 def visualize_embeddings(m1, m2, m3, epoch, method="pca", n_samples=200):
     """
     m1, m2, m3: tuples of (hat, hat1, hat2), each [batch, dim]
@@ -283,20 +292,20 @@ def visualize_embeddings(m1, m2, m3, epoch, method="pca", n_samples=200):
     all_embeds = []
     all_labels = []
 
-    for i, (hat, hat1, hat2) in enumerate([m1, m2, m3], start=1):
-        hat = hat.detach().cpu().numpy()
-        hat1 = hat1.detach().cpu().numpy()
-        hat2 = hat2.detach().cpu().numpy()
+    for i, (hat, hat1, hat2) in enumerate([m1,m2,m3], start=1):
+        hat = to_2d(hat)
+        hat1 = to_2d(hat1)
+        hat2 = to_2d(hat2)
 
         # sample to avoid clutter
         idx = np.random.choice(hat.shape[0], min(n_samples, hat.shape[0]), replace=False)
 
         all_embeds.append(hat[idx])
-        all_labels.extend([f"U{i}"] * len(idx))  # uniqueness
-        all_embeds.append(hat1[idx])
-        all_labels.extend([f"R{i}"] * len(idx))  # redundancy
-        all_embeds.append(hat2[idx])
-        all_labels.extend([f"S{i}"] * len(idx))  # synergy
+        all_labels.extend([f"U{i}"] * len(idx))
+        # all_embeds.append(hat1[idx])
+        # all_labels.extend([f"R{i}"] * len(idx))
+        # all_embeds.append(hat2[idx])
+        # all_labels.extend([f"S{i}"] * len(idx))
 
     all_embeds = np.concatenate(all_embeds, axis=0)
 
