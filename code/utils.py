@@ -292,7 +292,7 @@ def visualize_embeddings(m1, m2, m3, epoch, method="pca", n_samples=200):
     all_embeds = []
     all_labels = []
 
-    for i, (hat, hat1, hat2) in enumerate([m1,m2,m3], start=1):
+    for i, (hat, hat1, hat2) in enumerate([m1, m2, m3], start=1):
         hat = to_2d(hat)
         hat1 = to_2d(hat1)
         hat2 = to_2d(hat2)
@@ -319,14 +319,24 @@ def visualize_embeddings(m1, m2, m3, epoch, method="pca", n_samples=200):
 
     proj = reducer.fit_transform(all_embeds)
 
+    # Set global font sizes for paper-ready plots
+    plt.rcParams.update({
+        "font.size": 18,        # Base font size
+        "axes.titlesize": 20,   # Title font
+        "axes.labelsize": 18,   # X/Y label font
+        "legend.fontsize": 16,  # Legend font
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16
+    })
+
     # Plot
-    plt.figure(figsize=(7, 6))
+    plt.figure(figsize=(8, 7))
     for lbl in set(all_labels):
         idx = [i for i, l in enumerate(all_labels) if l == lbl]
-        plt.scatter(proj[idx, 0], proj[idx, 1], label=lbl, alpha=0.6, s=15)
+        plt.scatter(proj[idx, 0], proj[idx, 1], label=lbl, alpha=0.6, s=30)
 
     plt.title(f"Embedding projection ({method.upper()}) - Epoch {epoch}")
-    plt.legend()
+    plt.legend(markerscale=1.5)  # Make legend markers bigger
     plt.tight_layout()
-    plt.savefig(f"viz_embeddings/embeddings_{method}_epoch{epoch}.png")
+    plt.savefig(f"viz_embeddings/embeddings_{method}_epoch{epoch}.png", dpi=300)  # dpi=300 for paper
     plt.close()

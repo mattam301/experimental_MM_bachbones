@@ -23,17 +23,17 @@ from dataloader import load_iemocap, load_meld, Dataloader
 from optimizer import Optimizer
 from utils import set_seed, weight_visualize, info_nce_loss, visualize_embeddings, forward_masked_augmented
 import json
-from smurf_decomp import ThreeModalityModel, compute_corr_loss
+from divide_decomp import ThreeModalityModel, compute_corr_loss
 
 def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args):
     m1, m2, m3, final_repr = None, None, None, None
     device = args.device
-    if args.use_smurf and args.use_comm:
+    if args.use_divide and args.use_refine:
         print("Pretraining SMURF module...")
         optim = Optimizer(args.learning_rate, args.weight_decay)
         optim.set_parameters(smurf_model.parameters(), args.optimizer)
         smurf_model.to(device)
-        for epoch in range(80):
+        for epoch in range(200):
             for idx in (pbar := tqdm(range(len(train_set)), desc=f"Epoch {epoch+1}")):
                 smurf_model.zero_grad()
                 data = train_set[idx]
@@ -58,9 +58,9 @@ def smurf_pretrain(smurf_model: ThreeModalityModel, train_set: Dataloader, args)
                 m1, m2, m3, final_repr = smurf_model(textf, audiof, visualf)
                 corr_loss, L_uncor, L_cor = compute_corr_loss(m1, m2, m3)
                 # Compare tensors m1[0] and m1[2]
-                # if epoch % 10 == 0 and idx == 0:  # visualize once per 10 epochs, first batch
-                #     visualize_embeddings(m1, m2, m3, epoch, method="pca")
-                #     visualize_embeddings(m1, m2, m3, epoch, method="tsne")
+                if epoch % 10 == 0 and idx == 0:  # visualize once per 10 epochs, first batch
+                    visualize_embeddings(m1, m2, m3, epoch, method="pca")
+                    visualize_embeddings(m1, m2, m3, epoch, method="tsne")
                 final_logits = final_repr
     
                 # mask out padding and flatten (hot fix)
@@ -173,7 +173,7 @@ def train(model: nn.Module,
     else:
         smurf_model = None
     ## representation pretraining (input: representations of 3 modalities, output: new representations of 3 modalities with 3 components decomposed: unique, shared1, shared2)
-    if args.use_smurf and args.use_comm:
+    if args.use_divide and args.use_refine:
         _, _, _, _, smurf_model = smurf_pretrain(smurf_model, train_set, args)
         print("SMURF module pretrained.")
         # Save pretrained SMURF
@@ -208,14 +208,14 @@ def train(model: nn.Module,
             sample_idx = data["uid"]
             
             # Generate all data versions (include original, 3 masked, 2 augmented)
-            data_versions = generate_all_data_versions(model, data, smurf_model) if args.use_comm else [data]
+            data_versions = generate_all_data_versions(model, data, smurf_model) if args.use_refine else [data]
             ori_data = data_versions[0]
             masked_data_versions = data_versions[1:1+len(modalities)]
             augmented_data_versions = data_versions[1+len(modalities):]
             
             ###################### DEV: stack all versions for speed up
             # -------- STACKING STEP --------
-            if args.use_comm:
+            if args.use_refine:
                 if args.use_hightway:
                     rep_masked, rep_augmented = forward_masked_augmented(model, data_versions)
                 else:
@@ -247,8 +247,8 @@ def train(model: nn.Module,
             nll, ratio, take_samp, uni_nll = model.get_loss(ori_data)
             total_take_sample += take_samp
             total_sample += len(labels)
-            loss = nll + (0.1 * comm_loss if args.use_comm else 0)
-            # print(f"negative log likelihood: {nll.item()},comm loss: {comm_loss.item() if args.use_comm else 0}, total loss: {loss.item()}")
+            loss = nll + (0.1 * comm_loss if args.use_refine else 0)
+            # print(f"negative log likelihood: {nll.item()},comm loss: {comm_loss.item() if args.use_refine else 0}, total loss: {loss.item()}")
             _loss += loss.item()
             for m in modalities:
                 loss_m[m] += uni_nll[m].item()
@@ -346,7 +346,7 @@ def evaluate(model, smurf_model, dataset, args, logger, test=True):
                         data[k][m] = feat.to(device)
                 else:
                     data[k] = v.to(device)
-            if args.use_smurf and args.use_comm:
+            if args.use_divide and args.use_refine:
                 x1 = data["tensor"]['t']
                 x2 = data["tensor"]['a']
                 x3 = data["tensor"]['v']
@@ -589,10 +589,10 @@ def get_argurment():
         "--use_speaker", action="store_true", default=False,
     )
     parser.add_argument(
-        "--use_comm", action="store_true", default=False,
+        "--use_refine", action="store_true", default=False,
     )
     parser.add_argument(
-        "--use_smurf", action="store_true", default=False,
+        "--use_divide", action="store_true", default=False,
     )
     parser.add_argument(
         "--plot_smurf_decomp", action="store_true", default=False,

@@ -27,7 +27,7 @@ class Model(nn.Module):
         self.threshold = args.cl_threshold
         self.growing_factor = args.cl_growth
         
-        self.use_comm = args.use_comm
+        self.use_refine = args.use_refine
     def forward(self, data):
         # legacy pipeline
         joint, logit, feat = self.net(data)
